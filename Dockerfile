@@ -47,8 +47,8 @@ COPY --from=go-builder /fastclaw /usr/local/bin/fastclaw
 # default value here lets `docker run fastclaw/fastclaw` work with no env.
 ENV FASTCLAW_HOME=/data/.fastclaw \
     HOME=/data
-# No VOLUME directive: compose/k8s mount the data dir explicitly, and
-# platforms like Railway reject Dockerfiles containing VOLUME.
+# No volume directive here: compose/k8s mount the data dir explicitly,
+# and Railway's Dockerfile validator rejects it (even in comments).
 RUN mkdir -p /data/.fastclaw /data/.fastclaw/skills
 
 # Bundle built-in skills

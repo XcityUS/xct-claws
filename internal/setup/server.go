@@ -392,7 +392,10 @@ func (s *Server) Run(ctx context.Context) error {
 
 	var addr string
 	if s.bind == "all" {
-		addr = fmt.Sprintf("0.0.0.0:%d", s.port)
+		// Dual-stack (IPv4 + IPv6). IPv6 matters on platforms like
+		// Railway/Fly whose private networking is IPv6-only — a
+		// 0.0.0.0 listener is unreachable over those networks.
+		addr = fmt.Sprintf(":%d", s.port)
 	} else {
 		addr = fmt.Sprintf("127.0.0.1:%d", s.port)
 	}

@@ -13,10 +13,13 @@ COPY web/ .
 RUN pnpm build
 
 # --- Stage 1b: Build worldseed bundled plugin (Node 22 for util.styleText) ---
-FROM node:22-alpine AS worldseed-builder
+# Use debian-slim instead of alpine — some npm package postinstall scripts
+# (notably in the openclaw graph) link against glibc and fail under musl
+# with exit code 254 inside docker buildkit.
+FROM node:22-slim AS worldseed-builder
 WORKDIR /src/worldseed
 COPY bundled-plugins/worldseed-channel/package.json bundled-plugins/worldseed-channel/tsconfig.json ./
-RUN npm install --no-audit --no-fund --silent
+RUN npm install --no-audit --no-fund --loglevel=error
 COPY bundled-plugins/worldseed-channel/index.ts ./
 COPY bundled-plugins/worldseed-channel/src ./src
 COPY bundled-plugins/worldseed-channel/plugin.json bundled-plugins/worldseed-channel/README.md bundled-plugins/worldseed-channel/SKILL.md ./
@@ -24,7 +27,7 @@ COPY bundled-plugins/worldseed-channel/plugin.json bundled-plugins/worldseed-cha
 # non-fatal property-access errors against openclaw 2026.3.13 type defs).
 RUN node node_modules/typescript/bin/tsc || true
 # Drop devDeps (typescript, @types/node) so the final image is smaller.
-RUN npm prune --omit=dev --silent
+RUN npm prune --omit=dev --loglevel=error
 
 # --- Stage 2: Build Go binary ---
 FROM golang:1.25-alpine AS go-builder

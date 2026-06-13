@@ -221,10 +221,13 @@ async function main() {
     catch (err) {
         // Try as ESM
         try {
-            pluginModule = await Promise.resolve(`${resolved}`).then(s => __importStar(require(s)));
+            // True ESM dynamic import — bypass TS commonjs require-shim.
+            // Constructed via `new Function` so TypeScript does not rewrite import().
+            const dynImport = new Function("p", "return import(p)");
+            pluginModule = await dynImport(require("url").pathToFileURL(resolved).href);
         }
-        catch {
-            process.stderr.write(`Failed to load plugin: ${err.message}\n`);
+        catch (err2) {
+            process.stderr.write(`Failed to load plugin (cjs: ${err.message}; esm: ${err2.message})\n`);
             process.exit(1);
         }
     }

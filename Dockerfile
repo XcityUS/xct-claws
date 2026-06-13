@@ -17,6 +17,10 @@ RUN pnpm build
 # (notably in the openclaw graph) link against glibc and fail under musl
 # with exit code 254 inside docker buildkit.
 FROM node:22-slim AS worldseed-builder
+# git is required because the openclaw dep graph pulls some packages from
+# git URLs at install time; without it npm exits with ENOENT spawn git.
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /src/worldseed
 COPY bundled-plugins/worldseed-channel/package.json bundled-plugins/worldseed-channel/tsconfig.json ./
 RUN npm install --no-audit --no-fund --loglevel=error

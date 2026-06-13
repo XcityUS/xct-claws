@@ -1,0 +1,10 @@
+{
+  "id": "worldseed",
+  "name": "WorldSeed",
+  "version": "0.1.0",
+  "description": "WorldSeed persistent world channel — connects a FastClaw agent to a WorldSeed engine via WebSocket. Each registered account dials one WorldSeed server URL using a shared gateway token.",
+  "type": "channel",
+  "command": "node /opt/fastclaw/openclaw-bridge/proxy.js ./dist/index.js",
+  "capabilities": ["channel"],
+  "config": {}
+}

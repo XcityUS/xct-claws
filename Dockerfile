@@ -12,6 +12,20 @@ RUN pnpm install --frozen-lockfile
 COPY web/ .
 RUN pnpm build
 
+# --- Stage 1b: Build worldseed bundled plugin (Node 22 for util.styleText) ---
+FROM node:22-alpine AS worldseed-builder
+WORKDIR /src/worldseed
+COPY bundled-plugins/worldseed-channel/package.json bundled-plugins/worldseed-channel/tsconfig.json ./
+RUN npm install --no-audit --no-fund --silent
+COPY bundled-plugins/worldseed-channel/index.ts ./
+COPY bundled-plugins/worldseed-channel/src ./src
+COPY bundled-plugins/worldseed-channel/plugin.json bundled-plugins/worldseed-channel/README.md bundled-plugins/worldseed-channel/SKILL.md ./
+# tsc emits dist/ even with type errors (the worldseed plugin has a few
+# non-fatal property-access errors against openclaw 2026.3.13 type defs).
+RUN node node_modules/typescript/bin/tsc || true
+# Drop devDeps (typescript, @types/node) so the final image is smaller.
+RUN npm prune --omit=dev --silent
+
 # --- Stage 2: Build Go binary ---
 FROM golang:1.25-alpine AS go-builder
 RUN apk add --no-cache git
@@ -40,8 +54,22 @@ RUN CGO_ENABLED=0 go build \
 
 # --- Stage 3: Runtime ---
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates tzdata
+# nodejs is needed by the openclaw-plugin-bridge and any bundled JS plugins
+# (e.g. worldseed). util.styleText requires Node >=20, which alpine 3.21 ships.
+RUN apk add --no-cache ca-certificates tzdata nodejs
 COPY --from=go-builder /fastclaw /usr/local/bin/fastclaw
+
+# OpenClaw plugin bridge (precompiled CJS proxy; routes JSON-RPC <-> OpenClaw plugin)
+COPY tools/openclaw-plugin-bridge/proxy.js /opt/fastclaw/openclaw-bridge/proxy.js
+
+# Bundled plugins live at /opt and are copied into FASTCLAW_HOME/plugins by the
+# entrypoint on first boot. We avoid placing them directly under FASTCLAW_HOME
+# because that path is a volume mount target on production hosts, which would
+# shadow files baked into the image.
+COPY --from=worldseed-builder /src/worldseed /opt/fastclaw/bundled-plugins/worldseed
+
+COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Default data directory. Override at runtime with FASTCLAW_HOME, but the
 # default value here lets `docker run fastclaw/fastclaw` work with no env.
@@ -55,5 +83,5 @@ RUN mkdir -p /data/.fastclaw /data/.fastclaw/skills
 COPY skills/ /data/.fastclaw/skills/
 
 EXPOSE 18953
-ENTRYPOINT ["fastclaw"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["gateway"]

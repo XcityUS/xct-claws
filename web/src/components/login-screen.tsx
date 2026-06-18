@@ -27,13 +27,25 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [registrationOpen, setRegistrationOpen] = useState(false);
+  const [oidcEnabled, setOidcEnabled] = useState(false);
 
   useEffect(() => {
     let aborted = false;
     getStatus()
-      .then((s) => { if (!aborted) setRegistrationOpen(!!s.registrationOpen); })
-      .catch(() => { /* leave default false — sign-up link stays hidden */ });
+      .then((s) => {
+        if (aborted) return;
+        setRegistrationOpen(!!s.registrationOpen);
+        setOidcEnabled(!!s.oidcEnabled);
+      })
+      .catch(() => { /* leave defaults false — links stay hidden */ });
     return () => { aborted = true; };
+  }, []);
+
+  // Surface an error bounced back from the OIDC callback (e.g. ?oidc_error=…).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const code = new URLSearchParams(window.location.search).get("oidc_error");
+    if (code) setError(`Xcity sign-in failed (${code}). Please try again.`);
   }, []);
 
   function switchMode(next: "signin" | "signup") {
@@ -198,6 +210,21 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
             {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
+        {oidcEnabled && (
+          <>
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-zinc-800" />
+              <span className="text-xs text-zinc-600">or</span>
+              <div className="h-px flex-1 bg-zinc-800" />
+            </div>
+            <a
+              href="/auth/oidc/login"
+              className="block w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-center text-sm font-medium text-zinc-100 transition hover:border-violet-500 hover:bg-zinc-800"
+            >
+              Sign in with Xcity
+            </a>
+          </>
+        )}
         {registrationOpen && (
           <p className="text-center text-sm text-zinc-500">
             Don&apos;t have an account?{" "}

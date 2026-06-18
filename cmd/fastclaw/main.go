@@ -175,6 +175,7 @@ func runGateway(port int) error {
 	webSrv.SetWorkspaceStore(gw.Workspace())
 	webSrv.SetUsageMeter(gw.Usage())
 	webSrv.SetAuth(authResolver)
+	webSrv.SetOIDC(&env.OIDC)
 	webSrv.SetWebChannel(gw.WebChannel())
 	// Share the chat-event hub so bus-fired web turns (cron / goal
 	// continuation / heartbeat / sub-agent) stream through the same

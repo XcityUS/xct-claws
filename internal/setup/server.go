@@ -84,6 +84,9 @@ type Server struct {
 	chatEvents *agent.EventHub
 	usage      usage.Meter
 	startedAt  time.Time
+	// oidc configures "Sign in with Xcity" (external OAuth/OIDC IdP). nil or
+	// disabled = the /auth/oidc/* routes are not registered.
+	oidc *config.EnvOIDC
 }
 
 // NewServer creates a setup wizard server on the given port.
@@ -139,6 +142,12 @@ func (s *Server) SetUsageMeter(m usage.Meter) {
 // SetAuth installs the auth resolver. Required.
 func (s *Server) SetAuth(resolver *auth.Resolver) {
 	s.authResolver = resolver
+}
+
+// SetOIDC installs the external OIDC ("Sign in with Xcity") config. Optional;
+// when nil or disabled the /auth/oidc/* routes are not registered.
+func (s *Server) SetOIDC(cfg *config.EnvOIDC) {
+	s.oidc = cfg
 }
 
 // SetWebChannel installs the in-process fan-out used by the SSE
@@ -217,6 +226,11 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("GET /api/status", opt(s.handleStatus))
 	mux.HandleFunc("POST /api/login", s.handleLogin)
 	mux.HandleFunc("POST /api/logout", auth(s.handleLogout))
+	// "Sign in with Xcity" (external OIDC) — registered only when configured.
+	if s.oidc != nil && s.oidc.Enabled() {
+		mux.HandleFunc("GET /auth/oidc/login", s.handleOIDCLogin)
+		mux.HandleFunc("GET /auth/oidc/callback", s.handleOIDCCallback)
+	}
 	mux.HandleFunc("GET /api/me", auth(s.handleMe))
 	mux.HandleFunc("PUT /api/me", auth(s.handleUpdateMe))
 	mux.HandleFunc("POST /api/me/password", auth(s.handleChangeMyPassword))

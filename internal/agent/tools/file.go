@@ -183,7 +183,7 @@ func (r *Registry) isWorkspacePath(path string) bool {
 // the daemon's filesystem so exposing it would be a privilege leak.
 //
 // Returns ("", false) when the path is not a host-home reference, OR
-// when it falls under one of the FastClaw-managed roots
+// when it falls under one of the XCT Claw-managed roots
 // (~/.fastclaw/...) — those are runtime internals and should keep
 // flowing through their existing routing (workspaceStore, identity
 // store, etc.) so chat writes can't, say, smash the agents' DB file.
@@ -192,7 +192,7 @@ func hostHomePath(path string) (string, bool) {
 		return "", false
 	}
 	if path == "~" || strings.HasPrefix(path, "~/") {
-		// Sandbox-only / FastClaw-internal subtrees: skip host expansion
+		// Sandbox-only / XCT Claw-internal subtrees: skip host expansion
 		// so the read/write falls through to the sandbox executor instead
 		// of trying (and failing) on host disk where the path doesn't
 		// exist. Symmetric to the absolute-path guard below.
@@ -219,7 +219,7 @@ func hostHomePath(path string) (string, bool) {
 		return "", false
 	}
 	if strings.HasPrefix(path, "/Users/") || strings.HasPrefix(path, "/home/") {
-		// Refuse FastClaw-internal subpaths even when the chatter
+		// Refuse XCT Claw-internal subpaths even when the chatter
 		// reaches them via the host-home channel. Same guard as
 		// errGlobalSkillsDirWrite, broader scope.
 		if home, err := os.UserHomeDir(); err == nil {

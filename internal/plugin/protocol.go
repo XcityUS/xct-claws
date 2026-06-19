@@ -112,7 +112,7 @@ type ProviderListResult struct {
 
 // ProviderExecuteParams carries the per-call args and the resolved tenant
 // config (API key, endpoint, extra options, model id). The plugin process
-// must not cache credentials — FastClaw re-sends them every call so any
+// must not cache credentials — XCT Claw re-sends them every call so any
 // tenant can use the same plugin process safely.
 type ProviderExecuteParams struct {
 	Category string                 `json:"category"`

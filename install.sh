@@ -1,5 +1,5 @@
 #!/bin/sh
-# FastClaw Installer
+# XCT Claw Installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/fastclaw-ai/fastclaw/main/install.sh | sh
 # Or:    FASTCLAW_INSTALL_DIR=~/bin curl -fsSL ... | sh
 set -e
@@ -79,9 +79,9 @@ ensure_path() {
   # Write PATH export
   if [ "$_shell" = "fish" ]; then
     mkdir -p "$(dirname "$RC")"
-    printf '\n# FastClaw\nfish_add_path "%s"\n' "$INSTALL_DIR" >> "$RC"
+    printf '\n# XCT Claw\nfish_add_path "%s"\n' "$INSTALL_DIR" >> "$RC"
   else
-    printf '\n# FastClaw\nexport PATH="%s:$PATH"\n' "$INSTALL_DIR" >> "$RC"
+    printf '\n# XCT Claw\nexport PATH="%s:$PATH"\n' "$INSTALL_DIR" >> "$RC"
   fi
 
   NEEDS_SOURCE=1
@@ -136,7 +136,7 @@ install_binary() {
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 main() {
-  printf "\n${BOLD}  ⚡ FastClaw Installer${NC}\n"
+  printf "\n${BOLD}  ⚡ XCT Claw Installer${NC}\n"
   printf "  ─────────────────────\n\n"
 
   detect_platform
@@ -152,7 +152,7 @@ main() {
   ensure_path
 
   printf "\n"
-  success "FastClaw ${VERSION} installed → ${INSTALL_DIR}/${BINARY}"
+  success "XCT Claw ${VERSION} installed → ${INSTALL_DIR}/${BINARY}"
   printf "\n"
 
   if [ "${NEEDS_SOURCE:-0}" = "1" ]; then

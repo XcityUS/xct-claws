@@ -55,7 +55,7 @@ func newStubIdP(t *testing.T, cfg *stubIdP) *httptest.Server {
 // TestOIDCCallbackProvisionsUserAndBindsKey drives the full callback against
 // stub IdP (GoTrue) + xct-home key endpoints: code exchange → user provisioning
 // → session issuance → user-scope "tokenhub" provider binding. This is the
-// FastClaw side of the cross-repo integration, exercised end-to-end in-process.
+// XCT Claw side of the cross-repo integration, exercised end-to-end in-process.
 func TestOIDCCallbackProvisionsUserAndBindsKey(t *testing.T) {
 	ctx := context.Background()
 	s, _, _, _ := newAuthTestServer(t, ctx)

@@ -54,7 +54,7 @@ type Agent struct {
 	promptMode string
 	homePath        string // agent's home: SOUL.md, sessions, memory, skills
 	workspacePath   string // working dir where agent creates user files
-	homeDir         string // FastClaw root, ~/.fastclaw
+	homeDir         string // XCT Claw root, ~/.fastclaw
 	ownerUserID     string // the user that owns this agent (for hook namespacing)
 	// admins is the per-channel allowlist of chatters who can run write-
 	// mode slash commands (/new /undo /retry /compact /model /personality).

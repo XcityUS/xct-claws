@@ -73,10 +73,10 @@ func pluginListCmd() *cobra.Command {
 func pluginInstallCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "install <name|github-url|npm-package|path>",
-		Short: "Install a plugin from FastClaw Hub, GitHub, npm, or local path",
+		Short: "Install a plugin from XCT Claw Hub, GitHub, npm, or local path",
 		Long: `Install a plugin. The source is auto-detected:
 
-  fastclaw plugins install telegram                        # FastClaw Hub
+  fastclaw plugins install telegram                        # XCT Claw Hub
   fastclaw plugins install github.com/user/repo            # GitHub repo
   fastclaw plugins install @ollama/web-search              # npm plugin (bridged)
   fastclaw plugins install ./my-plugin                     # local directory`,
@@ -179,7 +179,7 @@ func installFromHub(name, pluginsDir string) error {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	fmt.Printf("Installing %q from FastClaw Hub...\n", name)
+	fmt.Printf("Installing %q from XCT Claw Hub...\n", name)
 
 	tarballURL := fmt.Sprintf("https://github.com/%s/archive/refs/heads/main.tar.gz", hubRepo)
 
@@ -207,7 +207,7 @@ func installFromHub(name, pluginsDir string) error {
 	}
 	pluginDir := filepath.Join(extractDir, entries[0].Name(), "plugins", name)
 	if _, err := os.Stat(pluginDir); os.IsNotExist(err) {
-		return fmt.Errorf("plugin %q not found in FastClaw Hub", name)
+		return fmt.Errorf("plugin %q not found in XCT Claw Hub", name)
 	}
 
 	// Check if it has plugin.json (standard plugin) or is a utility
@@ -295,7 +295,7 @@ func installFromNpm(pkg, pluginsDir string) error {
 	proxyDir := filepath.Join(homeDir, "tools", "plugin-bridge")
 	proxyJS := filepath.Join(proxyDir, "proxy.js")
 	if _, err := os.Stat(proxyJS); os.IsNotExist(err) {
-		fmt.Println("Installing plugin-bridge from FastClaw Hub...")
+		fmt.Println("Installing plugin-bridge from XCT Claw Hub...")
 		if err := installFromHub("plugin-bridge", pluginsDir); err != nil {
 			return fmt.Errorf("failed to install plugin-bridge: %w", err)
 		}
@@ -342,9 +342,9 @@ func installFromNpm(pkg, pluginsDir string) error {
 
 	if testErr != nil && toolCount == 0 {
 		if hasChannel {
-			return fmt.Errorf("cannot install %s: this is a channel plugin that requires a separate runtime. Consider writing a native FastClaw plugin instead", pkg)
+			return fmt.Errorf("cannot install %s: this is a channel plugin that requires a separate runtime. Consider writing a native XCT Claw plugin instead", pkg)
 		}
-		return fmt.Errorf("cannot install %s: plugin is not compatible with FastClaw bridge", pkg)
+		return fmt.Errorf("cannot install %s: plugin is not compatible with XCT Claw bridge", pkg)
 	}
 
 	if toolCount == 0 {

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Demo hook plugin for FastClaw.
+Demo hook plugin for XCT Claw.
 
 On every `post_turn` hook fire, sends a fixed follow-up message back to
 the same chat via the `chat.send` notification. Skeleton you can copy

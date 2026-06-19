@@ -298,7 +298,7 @@ func (cb *ContextBuilder) BuildSystemPromptAs(chatterUID string, chatterMem *Mem
 	// tracking, tool-use discipline, workspace self-update, scheduling.
 	// Chatbot mode drops the agent-loop bits so persona files (SOUL.md
 	// / IDENTITY.md / USER.md / MEMORY.md) shape voice directly without
-	// "I'm an AI agent running on FastClaw" bleeding into a friend bot's
+	// "I'm an AI agent running on XCT Claw" bleeding into a friend bot's
 	// tone. Minimal mode hands the floor entirely to the bootstrap
 	// files; only a date anchor is retained so the LLM doesn't guess
 	// time from its training cutoff.
@@ -332,7 +332,7 @@ func (cb *ContextBuilder) BuildSystemPromptAs(chatterUID string, chatterMem *Mem
 
 	case config.PromptModeChatbot:
 		// Slim identity scaffolding only. No "you are an AI agent on
-		// FastClaw" framing, no sandbox paths, no file-tool routing,
+		// XCT Claw" framing, no sandbox paths, no file-tool routing,
 		// no fastclaw branding. Persona files drive voice from here.
 		const bt = "`"
 		const fence = "```"
@@ -345,7 +345,7 @@ func (cb *ContextBuilder) BuildSystemPromptAs(chatterUID string, chatterMem *Mem
 		// present, still override via the bootstrap files section below.
 		identityHeader := ""
 		if cb.displayName != "" {
-			identityHeader = fmt.Sprintf("Your name is **%s** (this is the registered agent name in the FastClaw runtime). Introduce yourself as %s when asked \"你是谁\" / \"who are you\". If IDENTITY.md / SOUL.md below give a richer identity, use that on top of this; if they don't, this name stands.\n\n", cb.displayName, cb.displayName)
+			identityHeader = fmt.Sprintf("Your name is **%s** (this is the registered agent name in the XCT Claw runtime). Introduce yourself as %s when asked \"你是谁\" / \"who are you\". If IDENTITY.md / SOUL.md below give a richer identity, use that on top of this; if they don't, this name stands.\n\n", cb.displayName, cb.displayName)
 		}
 		chatbotInfo := identityHeader + `Your identity (name, role, personality) is
 defined by IDENTITY.md and SOUL.md below. If those are empty, you do not
@@ -470,9 +470,9 @@ identity files.
 		// upgrade questions.
 		var fastclawLine string
 		if buildinfo.IsHostedDeploy() {
-			fastclawLine = "FastClaw: hosted deployment. The chatter does NOT operate this runtime — if they ask about the version, upgrades, or installing/changing skills at the platform level, tell them those are administrator-controlled and offer to help with what's actually in your reach (config, skills you can author, files in the workspace)."
+			fastclawLine = "XCT Claw: hosted deployment. The chatter does NOT operate this runtime — if they ask about the version, upgrades, or installing/changing skills at the platform level, tell them those are administrator-controlled and offer to help with what's actually in your reach (config, skills you can author, files in the workspace)."
 		} else {
-			fastclawLine = fmt.Sprintf(`FastClaw: %s (commit %s, built %s). Self-hosted install — the chatter is the operator. If they ask about upgrading, tell them: run %sfastclaw upgrade%s in a terminal (and %sfastclaw version%s to verify). Don't try to run those yourself unless the chatter explicitly asks you to and you have host shell access (no sandbox).`,
+			fastclawLine = fmt.Sprintf(`XCT Claw: %s (commit %s, built %s). Self-hosted install — the chatter is the operator. If they ask about upgrading, tell them: run %sfastclaw upgrade%s in a terminal (and %sfastclaw version%s to verify). Don't try to run those yourself unless the chatter explicitly asks you to and you have host shell access (no sandbox).`,
 				buildinfo.Version, buildinfo.Commit, buildinfo.Date,
 				"`", "`", "`", "`")
 		}
@@ -482,9 +482,9 @@ identity files.
 		// IDENTITY.md don't introduce themselves as Claude either.
 		agentIdentityHeader := ""
 		if cb.displayName != "" {
-			agentIdentityHeader = fmt.Sprintf("Your registered name in this FastClaw deployment is **%s**. Use that as your name unless IDENTITY.md / SOUL.md below give you a richer one.\n\n", cb.displayName)
+			agentIdentityHeader = fmt.Sprintf("Your registered name in this XCT Claw deployment is **%s**. Use that as your name unless IDENTITY.md / SOUL.md below give you a richer one.\n\n", cb.displayName)
 		}
-		runtimeInfo := agentIdentityHeader + fmt.Sprintf(`You are an AI agent running on the FastClaw runtime.
+		runtimeInfo := agentIdentityHeader + fmt.Sprintf(`You are an AI agent running on the XCT Claw runtime.
 Your identity (name, role, personality) is defined by IDENTITY.md and SOUL.md
 below — if those are empty, you do NOT yet have a name and must follow the
 bootstrap instructions in BOOTSTRAP.md before answering the user.

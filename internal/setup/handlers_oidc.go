@@ -22,7 +22,7 @@ import (
 	"github.com/fastclaw-ai/fastclaw/internal/users"
 )
 
-// "Sign in with Xcity" — FastClaw as an OAuth 2.1 / OIDC client of an external
+// "Sign in with Xcity" — XCT Claw as an OAuth 2.1 / OIDC client of an external
 // IdP (auth.xcity.one / GoTrue). Two routes, registered only when the OIDC
 // config is present (see EnvOIDC.Enabled):
 //
@@ -31,7 +31,7 @@ import (
 //	                          then bind their xct-home TokenHub key as a provider
 //
 // Identity is the IdP's verified user (keyed by email here for the MVP — no
-// schema change). The user becomes a first-class FastClaw `user` and owns their
+// schema change). The user becomes a first-class XCT Claw `user` and owns their
 // agents in the console; a user-scope "tokenhub" provider carries their key so
 // every agent they create inherits it.
 
@@ -268,7 +268,7 @@ func (s *Server) oidcUserinfo(ctx context.Context, accessToken string) (sub, ema
 	return ui.Sub, ui.Email, nil
 }
 
-// ensureOIDCUser returns the FastClaw user id for an IdP email, creating a
+// ensureOIDCUser returns the XCT Claw user id for an IdP email, creating a
 // passwordless role=user account the first time it's seen. Idempotent.
 func (s *Server) ensureOIDCUser(ctx context.Context, email string) (string, error) {
 	if s.dataStore == nil || s.accounts == nil {

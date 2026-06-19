@@ -22,7 +22,7 @@ func (Direct) CredentialFree() bool   { return true }
 
 const (
 	directTimeout   = 30 * time.Second
-	directUserAgent = "FastClaw/1.0 (AI Agent Web Fetcher)"
+	directUserAgent = "XCT Claw/1.0 (AI Agent Web Fetcher)"
 )
 
 func (d *Direct) Execute(ctx context.Context, req toolproviders.Request) (toolproviders.Response, error) {

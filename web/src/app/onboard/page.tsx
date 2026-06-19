@@ -449,7 +449,7 @@ function WelcomeStep() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <PartyPopper className="size-5 text-primary" />
-          Welcome to FastClaw
+          Welcome to XCT Claw
         </CardTitle>
         <CardDescription>
           A few quick steps to set up your platform — admin account, first LLM

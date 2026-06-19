@@ -164,7 +164,7 @@ var hostHomeContentDirs = []string{
 	"projects", "code", "work", "src",
 }
 
-// isFastClawInternalPath reports whether path falls under FastClaw's
+// isFastClawInternalPath reports whether path falls under XCT Claw's
 // runtime-managed dirs (~/.fastclaw/...). These have dedicated routing
 // (workspaceStore, identity store, …) and tools must not write to them
 // through the chat-facing host path or they'd corrupt internal state.

@@ -1,4 +1,4 @@
-# FastClaw — single-file K8s deployment.
+# XCT Claw — single-file K8s deployment.
 #
 # ┌─ ONE-SHOT DEPLOY ──────────────────────────────────────────────────────┐
 # │  1. Edit the 3 (or 4) values in `fastclaw-secrets`                     │

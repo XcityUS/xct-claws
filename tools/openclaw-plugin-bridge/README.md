@@ -1,18 +1,18 @@
 # openclaw-proxy
 
-Bridge OpenClaw TypeScript plugins to FastClaw's JSON-RPC protocol.
+Bridge OpenClaw TypeScript plugins to XCT Claw's JSON-RPC protocol.
 
 ## How it works
 
 ```
-FastClaw Gateway ←→ JSON-RPC (stdin/stdout) ←→ openclaw-proxy ←→ OpenClaw Plugin (JS/TS)
+XCT Claw Gateway ←→ JSON-RPC (stdin/stdout) ←→ openclaw-proxy ←→ OpenClaw Plugin (JS/TS)
 ```
 
-The proxy loads an OpenClaw plugin, captures its `register()` calls (tools, channels, etc.), and exposes them via FastClaw's JSON-RPC protocol.
+The proxy loads an OpenClaw plugin, captures its `register()` calls (tools, channels, etc.), and exposes them via XCT Claw's JSON-RPC protocol.
 
 ## Supported capabilities
 
-| OpenClaw API | FastClaw RPC | Status |
+| OpenClaw API | XCT Claw RPC | Status |
 |---|---|---|
 | `api.registerTool()` | `tool.list` / `tool.execute` | ✅ |
 | `api.registerChannel()` | `channel.send` / `message.inbound` | ✅ |
@@ -28,7 +28,7 @@ cd tools/openclaw-proxy
 pnpm install && pnpm build
 ```
 
-### 2. Create a FastClaw plugin wrapper
+### 2. Create a XCT Claw plugin wrapper
 
 Given an OpenClaw plugin installed at `./node_modules/@openclaw/some-plugin`:
 
@@ -49,7 +49,7 @@ Given an OpenClaw plugin installed at `./node_modules/@openclaw/some-plugin`:
 
 ### 3. That's it
 
-FastClaw will start the proxy as a subprocess, which loads the OpenClaw plugin and bridges all registered tools/channels.
+XCT Claw will start the proxy as a subprocess, which loads the OpenClaw plugin and bridges all registered tools/channels.
 
 ## Example
 

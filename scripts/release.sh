@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# FastClaw Release Script
+# XCT Claw Release Script
 # Usage: ./scripts/release.sh v0.1.0
 
 VERSION="${1:-}"
@@ -17,7 +17,7 @@ BINARY="fastclaw"
 DIST_DIR="dist"
 MODULE="github.com/fastclaw-ai/fastclaw"
 
-echo "⚡ Building FastClaw ${VERSION}"
+echo "⚡ Building XCT Claw ${VERSION}"
 echo ""
 
 # Clean
@@ -104,4 +104,4 @@ echo "  2. git push origin ${VERSION}"
 echo "  3. Create GitHub release and upload ${DIST_DIR}/* files"
 echo ""
 echo "Or use gh CLI:"
-echo "  gh release create ${VERSION} ${DIST_DIR}/*.tar.gz ${DIST_DIR}/*.zip ${DIST_DIR}/checksums.txt --title \"FastClaw ${VERSION}\" --generate-notes"
+echo "  gh release create ${VERSION} ${DIST_DIR}/*.tar.gz ${DIST_DIR}/*.zip ${DIST_DIR}/checksums.txt --title \"XCT Claw ${VERSION}\" --generate-notes"

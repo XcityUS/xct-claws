@@ -48,10 +48,10 @@ type EnvLog struct {
 	Level string // FASTCLAW_LOG_LEVEL — "debug" / "info" / "warn" / "error"
 }
 
-// EnvOIDC configures "Sign in with Xcity" — FastClaw acting as an OAuth 2.1 /
+// EnvOIDC configures "Sign in with Xcity" — XCT Claw acting as an OAuth 2.1 /
 // OIDC client of an external IdP (auth.xcity.one / GoTrue). When enabled, the
 // console exposes /auth/oidc/login and /auth/oidc/callback. After login,
-// FastClaw fetches the user's product-scoped TokenHub key from xct-home's
+// XCT Claw fetches the user's product-scoped TokenHub key from xct-home's
 // integrations endpoint (KeyEndpoint) using the user's access token and binds
 // it as a user-scope "tokenhub" provider. All blank = feature off.
 type EnvOIDC struct {

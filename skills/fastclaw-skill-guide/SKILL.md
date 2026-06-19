@@ -1,11 +1,11 @@
 ---
 name: fastclaw-skill-guide
-description: Create new skills for FastClaw agents. Use when the user asks to create a skill, turn a workflow into a skill, or build reusable automation. Also use when discussing skill format, structure, or best practices.
+description: Create new skills for XCT Claw agents. Use when the user asks to create a skill, turn a workflow into a skill, or build reusable automation. Also use when discussing skill format, structure, or best practices.
 ---
 
-# FastClaw Skill Guide
+# XCT Claw Skill Guide
 
-Guide for creating new skills that FastClaw agents can discover and use.
+Guide for creating new skills that XCT Claw agents can discover and use.
 
 ## Skill Structure
 

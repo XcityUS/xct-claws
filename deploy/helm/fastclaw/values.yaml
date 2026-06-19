@@ -1,4 +1,4 @@
-## FastClaw Helm Chart — default values
+## XCT Claw Helm Chart — default values
 ##
 ## Same semantics as deploy/k8s/fastclaw.yaml: env-var driven, no
 ## init-container sed, workspace artifacts go to an object store

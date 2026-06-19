@@ -84,7 +84,7 @@ func (a *apiResolver) DispatchLINEWebhook(accountID string, body []byte, signatu
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "fastclaw",
-		Short: "FastClaw - Multi-User AI Agent Platform",
+		Short: "XCT Claw - Multi-User AI Agent Platform",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runGateway(18953)
 		},
@@ -113,7 +113,7 @@ func gatewayCmd() *cobra.Command {
 	var port int
 	cmd := &cobra.Command{
 		Use:   "gateway",
-		Short: "Start the FastClaw gateway",
+		Short: "Start the XCT Claw gateway",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runGateway(port)
 		},

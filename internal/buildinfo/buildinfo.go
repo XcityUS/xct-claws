@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// Version is the FastClaw release tag (e.g. "v0.4.2") set by the
+// Version is the XCT Claw release tag (e.g. "v0.4.2") set by the
 // Makefile via `git describe --tags`. Defaults to "dev" for ad-hoc
 // `go build`s where no ldflag is passed; consumers should treat that
 // as "no published version" rather than a real release.

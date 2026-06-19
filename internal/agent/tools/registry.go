@@ -469,7 +469,7 @@ func NewRegistry(systemRoot, userRoot string) *Registry {
 // running background shell (started via exec with run_in_background)
 // so they don't outlive their owning agent. Safe to call multiple
 // times. Callers that don't have a clean shutdown hook can omit it —
-// the OS reaps zombies when the FastClaw process exits anyway.
+// the OS reaps zombies when the XCT Claw process exits anyway.
 func (r *Registry) Close() {
 	if r.shellMgr != nil {
 		r.shellMgr.Close()

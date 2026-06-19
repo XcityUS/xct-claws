@@ -1,5 +1,5 @@
 ##
-## FastClaw — single-machine deployment with Postgres.
+## XCT Claw — single-machine deployment with Postgres.
 ##
 ## Quick start:
 ##   docker compose up -d

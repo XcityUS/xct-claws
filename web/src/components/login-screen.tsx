@@ -116,7 +116,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
         <div className="w-full max-w-sm space-y-6">
           <div className="text-center space-y-2">
             <h1 className="text-2xl font-bold text-zinc-100">Create your account</h1>
-            <p className="text-sm text-zinc-500">Sign up to start using FastClaw</p>
+            <p className="text-sm text-zinc-500">Sign up to start using XCT Claw</p>
           </div>
           <form onSubmit={handleSignUp} className="space-y-4">
             <input
@@ -180,7 +180,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
     <div className="flex min-h-screen items-center justify-center bg-zinc-950 p-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold text-zinc-100">FastClaw</h1>
+          <h1 className="text-2xl font-bold text-zinc-100">XCT Claw</h1>
           <p className="text-sm text-zinc-500">Sign in with your username or email</p>
         </div>
         <form onSubmit={handleSignIn} className="space-y-4">

@@ -255,7 +255,7 @@ func writeBundledHash(targetDir, hash string) error {
 	return os.WriteFile(filepath.Join(targetDir, bundledHashFile), []byte(hash+"\n"), 0o644)
 }
 
-// managedSkillsDir is the per-FastClaw-instance global skills location.
+// managedSkillsDir is the per-XCT Claw-instance global skills location.
 // Mirrors fastclawManagedDir in internal/agent/skills.go but kept local
 // here so this file's only dependency is os/filepath.
 func managedSkillsDir() string {

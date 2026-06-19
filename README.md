@@ -1,6 +1,6 @@
 <div align="center">
 
-# FastClaw
+# XCT Claw
 
 A lightweight AI Agent runtime written in Go.
 
@@ -15,20 +15,20 @@ A lightweight AI Agent runtime written in Go.
 ---
 
 <p align="center">
-  <img src="previews/admin.png" alt="FastClaw admin dashboard" width="900">
+  <img src="previews/admin.png" alt="XCT Claw admin dashboard" width="900">
   <br>
   <em>Platform admin: agents, models, skills, users, API keys</em>
 </p>
 
 <p align="center">
-  <img src="previews/agent.png" alt="FastClaw agent management" width="900">
+  <img src="previews/agent.png" alt="XCT Claw agent management" width="900">
   <br>
   <em>Per-agent management: chat, customize, scoped models / skills / channels / scheduler</em>
 </p>
 
-## What is FastClaw?
+## What is XCT Claw?
 
-FastClaw is an **Agent Factory** — it creates, manages, and runs AI agents. Each agent has its own personality (SOUL.md), memory, skills, and tools. FastClaw handles the LLM communication, tool execution, sandbox isolation, and session management.
+XCT Claw is an **Agent Factory** — it creates, manages, and runs AI agents. Each agent has its own personality (SOUL.md), memory, skills, and tools. XCT Claw handles the LLM communication, tool execution, sandbox isolation, and session management.
 
 ```bash
 # Install (drops the binary into ~/.local/bin and adds it to PATH)
@@ -101,7 +101,7 @@ DSN, sandbox backend) come from `FASTCLAW_*` env vars; everything user-
 facing (providers, channels, settings, defaults) lives in the `configs`
 table and is edited through the dashboard or `fastclaw agents config`.
 
-### What FastClaw Stores
+### What XCT Claw Stores
 
 | Data | Belongs to | Backing store |
 |------|-----------|---------------|
@@ -342,14 +342,14 @@ fastclaw apikey rotate --id <apikey-id>
 #### Multi-tenant app_user flow
 
 A `type=user` key combined with the `X-Fastclaw-End-User` header enables
-per-end-user data isolation without pre-registering users in FastClaw:
+per-end-user data isolation without pre-registering users in XCT Claw:
 
 ```
 Authorization: Bearer <user-key-token>
 X-Fastclaw-End-User: <your-app-user-id>
 ```
 
-FastClaw lazily mints a stable internal user for each unique
+XCT Claw lazily mints a stable internal user for each unique
 `(api_key_id, external_id)` pair. Sessions, memory, and files are fully
 isolated per end-user.
 
@@ -393,15 +393,15 @@ via `-ldflags`. CI uses these targets too — see `.github/workflows/`.
 
 ## License
 
-FastClaw is **source-available** under the [FastClaw Community License](LICENSE),
+XCT Claw is **source-available** under the [XCT Claw Community License](LICENSE),
 based on Apache License 2.0 with additional conditions.
 
 **TL;DR:**
 - ✅ Use it commercially as a backend for your own product
 - ✅ Internal deployment within your organization
-- ❌ Hosting FastClaw as a multi-tenant SaaS for unrelated organizations
+- ❌ Hosting XCT Claw as a multi-tenant SaaS for unrelated organizations
   (without a commercial license)
-- ❌ Removing or modifying the FastClaw branding in the dashboard UI
+- ❌ Removing or modifying the XCT Claw branding in the dashboard UI
 
 The full Apache 2.0 text is reproduced inside the [LICENSE](LICENSE) file
 under the addendum. For commercial licensing inquiries: support@thinkany.ai.

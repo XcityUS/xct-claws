@@ -559,7 +559,7 @@ type AgentFileConfig struct {
 	// gate (anyone can run the command — backward-compatible default).
 	//
 	// On web/api the gate falls through to msg.UserID == agent owner UUID
-	// regardless of this field, since those channels carry the FastClaw
+	// regardless of this field, since those channels carry the XCT Claw
 	// identity directly and don't need a per-platform allowlist.
 	Admins map[string][]string `json:"admins,omitempty"`
 }
@@ -646,7 +646,7 @@ type TeamConfig struct {
 	Routing map[string]string `json:"routing"`
 }
 
-// HomeDir returns the FastClaw root directory (default ~/.fastclaw).
+// HomeDir returns the XCT Claw root directory (default ~/.fastclaw).
 // Holds the sqlite db, sandbox roots, and FS-materialized agent caches.
 func HomeDir() (string, error) {
 	if h := os.Getenv("FASTCLAW_HOME"); h != "" {

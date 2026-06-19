@@ -23,7 +23,7 @@ type webFetchArgs struct {
 const (
 	defaultMaxLen  = 10000
 	fetchTimeout   = 30 * time.Second
-	fetchUserAgent = "FastClaw/1.0 (AI Agent Web Fetcher)"
+	fetchUserAgent = "XCT Claw/1.0 (AI Agent Web Fetcher)"
 )
 
 var htmlTagRe = regexp.MustCompile(`<[^>]*>`)

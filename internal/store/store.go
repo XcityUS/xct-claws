@@ -1,4 +1,4 @@
-// Package store is the single persistence layer for FastClaw. The database
+// Package store is the single persistence layer for XCT Claw. The database
 // is mandatory (sqlite by default; postgres for production); there is no
 // file-only fallback. Every per-user table requires a real users.id row;
 // callers that haven't resolved a user must 401, not invent a placeholder.

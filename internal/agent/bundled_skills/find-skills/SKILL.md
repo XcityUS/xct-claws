@@ -111,7 +111,7 @@ The 20-install case is FINE — it's a niche request, the skill is on-topic, tha
 
 ### Step 6: Install AND Use the Skill
 
-Install with `-g -y` — the FastClaw sandbox bind-mounts the global install location to the chatter's host skill bucket, so a `-g` install lands in `~/.fastclaw/users/<uid>/skills/<name>/` on host and is visible to the next chat turn.
+Install with `-g -y` — the XCT Claw sandbox bind-mounts the global install location to the chatter's host skill bucket, so a `-g` install lands in `~/.fastclaw/users/<uid>/skills/<name>/` on host and is visible to the next chat turn.
 
 ```bash
 npx skills add <owner/repo@skill> -g -y

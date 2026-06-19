@@ -18,9 +18,9 @@ import (
 func versionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
-		Short: "Print FastClaw version",
+		Short: "Print XCT Claw version",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("FastClaw %s\n", version)
+			fmt.Printf("XCT Claw %s\n", version)
 			fmt.Printf("  commit: %s\n", commit)
 			fmt.Printf("  built:  %s\n", date)
 			fmt.Printf("  go:     %s\n", runtime.Version())
@@ -34,7 +34,7 @@ func upgradeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "upgrade",
 		Aliases: []string{"update"},
-		Short:   "Upgrade FastClaw to the latest version",
+		Short:   "Upgrade XCT Claw to the latest version",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return doUpgrade()
 		},

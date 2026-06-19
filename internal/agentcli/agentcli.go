@@ -1,5 +1,5 @@
 // Package agentcli provides the data-layer operations that fastclaw's
-// `agents …` CLI subcommands run against the operator's own FastClaw
+// `agents …` CLI subcommands run against the operator's own XCT Claw
 // store. The CLI is a thin convenience wrapper over the same store the
 // gateway and dashboard use — agents created here are indistinguishable
 // from agents created via the web UI.

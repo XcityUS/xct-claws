@@ -178,7 +178,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   // When the active agent isn't in the caller's owned list — e.g. a
   // super_admin chatting with another user's agent — fetch its name
   // separately and splice it in so the switcher header shows the real
-  // name instead of falling back to "FastClaw". The single-agent
+  // name instead of falling back to "XCT Claw". The single-agent
   // endpoint also returns role, so capture it here too.
   React.useEffect(() => {
     if (!activeAgentId) return;

@@ -10,7 +10,7 @@ import (
 	"text/template"
 )
 
-// Install installs FastClaw as an OS service.
+// Install installs XCT Claw as an OS service.
 func Install() error {
 	switch runtime.GOOS {
 	case "darwin":
@@ -23,7 +23,7 @@ func Install() error {
 	}
 }
 
-// Uninstall removes the FastClaw OS service.
+// Uninstall removes the XCT Claw OS service.
 func Uninstall() error {
 	switch runtime.GOOS {
 	case "darwin":
@@ -128,7 +128,7 @@ func installLaunchd() error {
 	}
 
 	fmt.Printf("Service installed: %s\n", plistPath)
-	fmt.Println("FastClaw gateway will start automatically on login.")
+	fmt.Println("XCT Claw gateway will start automatically on login.")
 	return nil
 }
 
@@ -162,7 +162,7 @@ func uninstallLaunchd() error {
 const systemdUnit = "fastclaw-gateway.service"
 
 var systemdUnitTemplate = template.Must(template.New("unit").Parse(`[Unit]
-Description=FastClaw AI Agent Gateway
+Description=XCT Claw AI Agent Gateway
 After=network.target
 
 [Service]
@@ -247,7 +247,7 @@ func installSystemd() error {
 	}
 
 	fmt.Printf("Service installed: %s\n", unitPath)
-	fmt.Println("FastClaw gateway is running and will start on boot.")
+	fmt.Println("XCT Claw gateway is running and will start on boot.")
 	return nil
 }
 
@@ -289,7 +289,7 @@ func printWindowsInstructions() {
 	fmt.Println()
 	fmt.Println("Options:")
 	fmt.Println("  1. Use NSSM (Non-Sucking Service Manager):")
-	fmt.Println("     nssm install FastClaw <path-to-fastclaw.exe> gateway")
+	fmt.Println("     nssm install XCT Claw <path-to-fastclaw.exe> gateway")
 	fmt.Println()
 	fmt.Println("  2. Use Task Scheduler:")
 	fmt.Println("     - Open Task Scheduler")

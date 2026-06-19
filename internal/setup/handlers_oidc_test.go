@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,43 @@ import (
 	"github.com/fastclaw-ai/fastclaw/internal/users"
 )
 
+// stubIdP configures a fake OIDC IdP (discovery + token + userinfo).
+type stubIdP struct {
+	onToken      func(*http.Request)
+	tokenJSON    string
+	onUserinfo   func(*http.Request)
+	userinfoJSON string
+}
+
+// newStubIdP spins up an httptest server that serves OIDC discovery pointing at
+// its own /oauth/token and /oauth/userinfo. Caller defers Close().
+func newStubIdP(t *testing.T, cfg *stubIdP) *httptest.Server {
+	t.Helper()
+	var srv *httptest.Server
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"authorization_endpoint":%q,"token_endpoint":%q,"userinfo_endpoint":%q}`,
+			srv.URL+"/oauth/authorize", srv.URL+"/oauth/token", srv.URL+"/oauth/userinfo")
+	})
+	mux.HandleFunc("/oauth/token", func(w http.ResponseWriter, r *http.Request) {
+		if cfg.onToken != nil {
+			cfg.onToken(r)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, cfg.tokenJSON)
+	})
+	mux.HandleFunc("/oauth/userinfo", func(w http.ResponseWriter, r *http.Request) {
+		if cfg.onUserinfo != nil {
+			cfg.onUserinfo(r)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, cfg.userinfoJSON)
+	})
+	srv = httptest.NewServer(mux)
+	return srv
+}
+
 // TestOIDCCallbackProvisionsUserAndBindsKey drives the full callback against
 // stub IdP (GoTrue) + xct-home key endpoints: code exchange → user provisioning
 // → session issuance → user-scope "tokenhub" provider binding. This is the
@@ -23,14 +61,19 @@ func TestOIDCCallbackProvisionsUserAndBindsKey(t *testing.T) {
 	s, _, _, _ := newAuthTestServer(t, ctx)
 	t.Setenv("FASTCLAW_HOME", t.TempDir())
 
-	// Stub IdP: PKCE token exchange returns an access token + the SSO user.
-	var tokenBody string
-	idp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		tokenBody = string(b)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"access_token":"acc-tok","refresh_token":"ref","expires_in":3600,"user":{"id":"sub-1","email":"User@Example.com"}}`)
-	}))
+	// Stub IdP: OIDC discovery + authorization_code token exchange + userinfo.
+	var tokenBody, tokenCT string
+	var userinfoAuth string
+	idp := newStubIdP(t, &stubIdP{
+		onToken: func(r *http.Request) {
+			b, _ := io.ReadAll(r.Body)
+			tokenBody = string(b)
+			tokenCT = r.Header.Get("Content-Type")
+		},
+		tokenJSON:    `{"access_token":"acc-tok","token_type":"bearer","expires_in":3600,"id_token":"x.y.z"}`,
+		onUserinfo:   func(r *http.Request) { userinfoAuth = r.Header.Get("Authorization") },
+		userinfoJSON: `{"sub":"sub-1","email":"User@Example.com"}`,
+	})
 	defer idp.Close()
 
 	// Stub xct-home key endpoint: returns the user's Claws-scoped key.
@@ -62,8 +105,17 @@ func TestOIDCCallbackProvisionsUserAndBindsKey(t *testing.T) {
 	if loc := rr.Header().Get("Location"); loc != "/overview" {
 		t.Fatalf("redirect Location = %q, want /overview", loc)
 	}
-	if !strings.Contains(tokenBody, "ver-1") || !strings.Contains(tokenBody, "abc") {
-		t.Fatalf("token exchange body missing code/verifier: %q", tokenBody)
+	// authorization_code grant, form-encoded, carrying code + PKCE verifier.
+	if !strings.Contains(tokenCT, "x-www-form-urlencoded") {
+		t.Fatalf("token Content-Type = %q, want form-urlencoded", tokenCT)
+	}
+	if !strings.Contains(tokenBody, "grant_type=authorization_code") ||
+		!strings.Contains(tokenBody, "code_verifier=ver-1") ||
+		!strings.Contains(tokenBody, "code=abc") {
+		t.Fatalf("token exchange body wrong: %q", tokenBody)
+	}
+	if userinfoAuth != "Bearer acc-tok" {
+		t.Fatalf("userinfo Authorization = %q, want Bearer acc-tok", userinfoAuth)
 	}
 	if gotAuth != "Bearer acc-tok" {
 		t.Fatalf("key endpoint Authorization = %q, want Bearer acc-tok", gotAuth)
@@ -147,11 +199,13 @@ func TestOIDCCallbackRejectsStateMismatch(t *testing.T) {
 func TestOIDCLoginRedirectsToAuthorize(t *testing.T) {
 	ctx := context.Background()
 	s, _, _, _ := newAuthTestServer(t, ctx)
+	idp := newStubIdP(t, &stubIdP{tokenJSON: "{}", userinfoJSON: "{}"})
+	defer idp.Close()
 	s.SetOIDC(&config.EnvOIDC{
-		IssuerURL:   "https://auth.xcity.one",
+		IssuerURL:   idp.URL,
 		ClientID:    "xct-claws",
 		RedirectURL: "https://claws.xcity.one/auth/oidc/callback",
-		Scopes:      "openid email tokenhub:key",
+		Scopes:      "openid email",
 	})
 
 	rr := httptest.NewRecorder()
@@ -161,11 +215,11 @@ func TestOIDCLoginRedirectsToAuthorize(t *testing.T) {
 		t.Fatalf("status = %d, want 302", rr.Code)
 	}
 	loc := rr.Header().Get("Location")
+	// Discovery resolves the authorize endpoint to the IdP's /oauth/authorize.
 	for _, want := range []string{
-		"https://auth.xcity.one/authorize?",
+		idp.URL + "/oauth/authorize?",
 		"client_id=xct-claws",
 		"code_challenge_method=S256",
-		"tokenhub%3Akey", // scope, url-encoded
 		"response_type=code",
 	} {
 		if !strings.Contains(loc, want) {

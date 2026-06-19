@@ -57,7 +57,7 @@ type EnvLog struct {
 type EnvOIDC struct {
 	IssuerURL   string // FASTCLAW_OIDC_ISSUER_URL    — e.g. https://auth.xcity.one (authorize/token derived from this)
 	ClientID    string // FASTCLAW_OIDC_CLIENT_ID     — e.g. xct-claws
-	Scopes      string // FASTCLAW_OIDC_SCOPES        — default "openid profile email tokenhub:key"
+	Scopes      string // FASTCLAW_OIDC_SCOPES        — default "openid profile email"
 	RedirectURL string // FASTCLAW_OIDC_REDIRECT_URL  — e.g. https://claws.xcity.one/auth/oidc/callback
 	KeyEndpoint string // FASTCLAW_OIDC_KEY_ENDPOINT  — e.g. https://www.xcity.one/api/me/integrations/key
 }
@@ -134,7 +134,11 @@ func LoadEnv() *EnvConfig {
 	cfg.OIDC.KeyEndpoint = os.Getenv("FASTCLAW_OIDC_KEY_ENDPOINT")
 	cfg.OIDC.Scopes = os.Getenv("FASTCLAW_OIDC_SCOPES")
 	if cfg.OIDC.Scopes == "" {
-		cfg.OIDC.Scopes = "openid profile email tokenhub:key"
+		// GoTrue's OAuth-2.1 server only advertises openid/profile/email/phone.
+		// Custom scopes (e.g. a TokenHub-key scope) are not issuable, so the
+		// xct-home key endpoint must gate on the client allow-list + Claws
+		// entitlement, not on a scope. See the integration design doc.
+		cfg.OIDC.Scopes = "openid profile email"
 	}
 	return cfg
 }

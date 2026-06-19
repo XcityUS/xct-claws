@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fastclaw-ai/fastclaw/internal/config"
@@ -60,6 +61,7 @@ func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 	setShortCookie(w, oidcStateCookie, state)
 	setShortCookie(w, oidcVerifierCookie, verifier)
 
+	ep := s.oidcEndpoints(r.Context())
 	q := url.Values{}
 	q.Set("client_id", s.oidc.ClientID)
 	q.Set("redirect_uri", s.oidc.RedirectURL)
@@ -68,7 +70,7 @@ func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 	q.Set("state", state)
 	q.Set("code_challenge", challenge)
 	q.Set("code_challenge_method", "S256")
-	http.Redirect(w, r, s.oidc.IssuerURL+"/authorize?"+q.Encode(), http.StatusFound)
+	http.Redirect(w, r, ep.Authorization+"?"+q.Encode(), http.StatusFound)
 }
 
 // handleOIDCCallback completes the flow: validate state, exchange the code,
@@ -96,13 +98,19 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tok, err := s.exchangeOIDCCode(r.Context(), code, verifierCookie.Value)
+	accessToken, err := s.exchangeOIDCCode(r.Context(), code, verifierCookie.Value)
 	if err != nil {
 		slog.Warn("oidc: code exchange failed", "error", err)
 		redirectLoginErr(w, r, "oidc_exchange_failed")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(tok.User.Email))
+	_, email, err := s.oidcUserinfo(r.Context(), accessToken)
+	if err != nil {
+		slog.Warn("oidc: userinfo failed", "error", err)
+		redirectLoginErr(w, r, "oidc_userinfo_failed")
+		return
+	}
+	email = strings.ToLower(strings.TrimSpace(email))
 	if email == "" {
 		redirectLoginErr(w, r, "oidc_no_email")
 		return
@@ -127,7 +135,7 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	// no Claws entitlement → 403) must not block login — the user lands in the
 	// console and can subscribe / retry. We just log it.
 	if s.oidc.KeyEndpoint != "" {
-		if berr := s.bindTokenHubKey(r.Context(), acctID, tok.AccessToken); berr != nil {
+		if berr := s.bindTokenHubKey(r.Context(), acctID, accessToken); berr != nil {
 			slog.Warn("oidc: bind tokenhub key failed", "error", berr, "user", acctID)
 		}
 	}
@@ -135,44 +143,129 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/overview", http.StatusFound)
 }
 
-// oidcTokenResponse is the subset of GoTrue's token response we consume.
-type oidcTokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int    `json:"expires_in"`
-	User         struct {
-		ID    string `json:"id"`
-		Email string `json:"email"`
-	} `json:"user"`
+// oidcEndpoints holds the IdP endpoints resolved from OIDC discovery.
+type oidcEndpoints struct {
+	Authorization string
+	Token         string
+	Userinfo      string
 }
 
-// exchangeOIDCCode trades an authorization code + PKCE verifier for tokens at
-// GoTrue's PKCE token endpoint.
-func (s *Server) exchangeOIDCCode(ctx context.Context, code, verifier string) (*oidcTokenResponse, error) {
-	body, _ := json.Marshal(map[string]string{"auth_code": code, "code_verifier": verifier})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		s.oidc.IssuerURL+"/token?grant_type=pkce", strings.NewReader(string(body)))
-	if err != nil {
-		return nil, err
+var (
+	oidcDiscMu    sync.Mutex
+	oidcDiscCache = map[string]oidcEndpoints{}
+)
+
+// oidcEndpoints resolves the IdP's authorization/token/userinfo endpoints from
+// its OIDC discovery document (cached per issuer). Falls back to the GoTrue
+// OAuth-2.1 server's conventional /oauth/* paths when discovery is unreachable.
+func (s *Server) oidcEndpoints(ctx context.Context) oidcEndpoints {
+	issuer := s.oidc.IssuerURL
+	oidcDiscMu.Lock()
+	if e, ok := oidcDiscCache[issuer]; ok {
+		oidcDiscMu.Unlock()
+		return e
 	}
-	req.Header.Set("Content-Type", "application/json")
+	oidcDiscMu.Unlock()
+
+	e := oidcEndpoints{
+		Authorization: issuer + "/oauth/authorize",
+		Token:         issuer + "/oauth/token",
+		Userinfo:      issuer + "/oauth/userinfo",
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, issuer+"/.well-known/openid-configuration", nil)
+	if err == nil {
+		if resp, derr := oidcHTTPClient.Do(req); derr == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				var d struct {
+					AuthorizationEndpoint string `json:"authorization_endpoint"`
+					TokenEndpoint         string `json:"token_endpoint"`
+					UserinfoEndpoint      string `json:"userinfo_endpoint"`
+				}
+				if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&d) == nil {
+					if d.AuthorizationEndpoint != "" {
+						e.Authorization = d.AuthorizationEndpoint
+					}
+					if d.TokenEndpoint != "" {
+						e.Token = d.TokenEndpoint
+					}
+					if d.UserinfoEndpoint != "" {
+						e.Userinfo = d.UserinfoEndpoint
+					}
+				}
+			}
+		}
+	}
+	oidcDiscMu.Lock()
+	oidcDiscCache[issuer] = e
+	oidcDiscMu.Unlock()
+	return e
+}
+
+// exchangeOIDCCode trades an authorization code + PKCE verifier for an access
+// token via the standard authorization_code grant (public client, no secret).
+func (s *Server) exchangeOIDCCode(ctx context.Context, code, verifier string) (string, error) {
+	ep := s.oidcEndpoints(ctx)
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("redirect_uri", s.oidc.RedirectURL)
+	form.Set("client_id", s.oidc.ClientID)
+	form.Set("code_verifier", verifier)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ep.Token, strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
 	resp, err := oidcHTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("token endpoint returned %d: %s", resp.StatusCode, truncate(string(raw), 300))
+		return "", fmt.Errorf("token endpoint returned %d: %s", resp.StatusCode, truncate(string(raw), 300))
 	}
-	var tok oidcTokenResponse
+	var tok struct {
+		AccessToken string `json:"access_token"`
+	}
 	if err := json.Unmarshal(raw, &tok); err != nil {
-		return nil, fmt.Errorf("decode token response: %w", err)
+		return "", fmt.Errorf("decode token response: %w", err)
 	}
 	if tok.AccessToken == "" {
-		return nil, errors.New("token endpoint returned empty access_token")
+		return "", errors.New("token endpoint returned empty access_token")
 	}
-	return &tok, nil
+	return tok.AccessToken, nil
+}
+
+// oidcUserinfo resolves the signed-in user's subject + email from the IdP
+// userinfo endpoint using the access token.
+func (s *Server) oidcUserinfo(ctx context.Context, accessToken string) (sub, email string, err error) {
+	ep := s.oidcEndpoints(ctx)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ep.Userinfo, nil)
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Accept", "application/json")
+	resp, err := oidcHTTPClient.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("userinfo returned %d: %s", resp.StatusCode, truncate(string(raw), 200))
+	}
+	var ui struct {
+		Sub   string `json:"sub"`
+		Email string `json:"email"`
+	}
+	if err := json.Unmarshal(raw, &ui); err != nil {
+		return "", "", fmt.Errorf("decode userinfo: %w", err)
+	}
+	return ui.Sub, ui.Email, nil
 }
 
 // ensureOIDCUser returns the FastClaw user id for an IdP email, creating a

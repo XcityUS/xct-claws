@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 // EnvConfig is the bootstrap configuration: storage DSN, gateway port,
@@ -18,6 +19,7 @@ type EnvConfig struct {
 	Storage EnvStorage
 	Sandbox EnvSandbox
 	Log     EnvLog
+	OIDC    EnvOIDC
 }
 
 type EnvGateway struct {
@@ -44,6 +46,25 @@ type EnvSandbox struct {
 
 type EnvLog struct {
 	Level string // FASTCLAW_LOG_LEVEL — "debug" / "info" / "warn" / "error"
+}
+
+// EnvOIDC configures "Sign in with Xcity" — FastClaw acting as an OAuth 2.1 /
+// OIDC client of an external IdP (auth.xcity.one / GoTrue). When enabled, the
+// console exposes /auth/oidc/login and /auth/oidc/callback. After login,
+// FastClaw fetches the user's product-scoped TokenHub key from xct-home's
+// integrations endpoint (KeyEndpoint) using the user's access token and binds
+// it as a user-scope "tokenhub" provider. All blank = feature off.
+type EnvOIDC struct {
+	IssuerURL   string // FASTCLAW_OIDC_ISSUER_URL    — e.g. https://auth.xcity.one (authorize/token derived from this)
+	ClientID    string // FASTCLAW_OIDC_CLIENT_ID     — e.g. xct-claws
+	Scopes      string // FASTCLAW_OIDC_SCOPES        — default "openid profile email"
+	RedirectURL string // FASTCLAW_OIDC_REDIRECT_URL  — e.g. https://claws.xcity.one/auth/oidc/callback
+	KeyEndpoint string // FASTCLAW_OIDC_KEY_ENDPOINT  — e.g. https://www.xcity.one/api/me/integrations/key
+}
+
+// Enabled reports whether the minimum config for the OIDC flow is present.
+func (o EnvOIDC) Enabled() bool {
+	return o.IssuerURL != "" && o.ClientID != "" && o.RedirectURL != ""
 }
 
 // LoadEnv reads the bootstrap configuration from FASTCLAW_* environment
@@ -105,6 +126,19 @@ func LoadEnv() *EnvConfig {
 
 	if v := os.Getenv("FASTCLAW_LOG_LEVEL"); v != "" {
 		cfg.Log.Level = v
+	}
+
+	cfg.OIDC.IssuerURL = strings.TrimRight(os.Getenv("FASTCLAW_OIDC_ISSUER_URL"), "/")
+	cfg.OIDC.ClientID = os.Getenv("FASTCLAW_OIDC_CLIENT_ID")
+	cfg.OIDC.RedirectURL = os.Getenv("FASTCLAW_OIDC_REDIRECT_URL")
+	cfg.OIDC.KeyEndpoint = os.Getenv("FASTCLAW_OIDC_KEY_ENDPOINT")
+	cfg.OIDC.Scopes = os.Getenv("FASTCLAW_OIDC_SCOPES")
+	if cfg.OIDC.Scopes == "" {
+		// GoTrue's OAuth-2.1 server only advertises openid/profile/email/phone.
+		// Custom scopes (e.g. a TokenHub-key scope) are not issuable, so the
+		// xct-home key endpoint must gate on the client allow-list + Claws
+		// entitlement, not on a scope. See the integration design doc.
+		cfg.OIDC.Scopes = "openid profile email"
 	}
 	return cfg
 }

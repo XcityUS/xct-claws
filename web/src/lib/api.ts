@@ -1,6 +1,7 @@
 export interface StatusResponse {
   configured: boolean;
   registrationOpen?: boolean;
+  oidcEnabled?: boolean;
   running: boolean;
   port: number;
   mode?: string;

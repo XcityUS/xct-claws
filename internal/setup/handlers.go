@@ -197,7 +197,7 @@ var settingNamespaces = []settingNamespace{
 		dst:     func(c *config.Config) interface{} { return &c.Teams },
 		collect: func(c *config.Config) map[string]interface{} { return wrapKeyed(c.Teams) }},
 	{namespace: "bindings",
-		dst:     func(c *config.Config) interface{} { return &c.Bindings },
+		dst: func(c *config.Config) interface{} { return &c.Bindings },
 		collect: func(c *config.Config) map[string]interface{} {
 			if len(c.Bindings) == 0 {
 				return nil
@@ -381,6 +381,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"channels":         []any{},
 		"provider":         nil,
 		"uptime":           formatDuration(time.Since(s.startedAt)),
+		// Surfaced pre-auth so the login screen can show "Sign in with Xcity".
+		"oidcEnabled": s.oidc != nil && s.oidc.Enabled(),
 	}
 	ident, authed := auth.FromContext(r.Context())
 	if !authed {
@@ -810,15 +812,15 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 // --- chat handlers (delegate to per-user agent) ---
 
 type chatRequest struct {
-	AgentID   string         `json:"agentId,omitempty"`
-	SessionID string         `json:"sessionId"`
+	AgentID   string `json:"agentId,omitempty"`
+	SessionID string `json:"sessionId"`
 	// ProjectID, when non-empty AND the session row doesn't yet exist,
 	// is the "this chat belongs to project X" hint the URL carries
 	// (`?project=<pid>`) before the first message. Once the row exists
 	// it's authoritative — the server reads project_id from the row
 	// and ignores any later hint.
-	ProjectID string         `json:"projectId,omitempty"`
-	Message   string         `json:"message"`
+	ProjectID string `json:"projectId,omitempty"`
+	Message   string `json:"message"`
 	// Images carries data URLs / HTTPS URLs for image attachments. The
 	// web client historically sends them under `imageUrls` (camelCase)
 	// while the API path uses `images`; we accept both and merge below
@@ -1173,21 +1175,21 @@ func forwardEvent(w http.ResponseWriter, flusher http.Flusher, env agent.EventEn
 // handleChatSubscribe holds an SSE connection open for one (agent,
 // session) pair and forwards three kinds of traffic:
 //
-//   1. Replay: session_events rows with seq > since (or > Last-Event-ID)
-//      that the client missed before connecting. Lets a freshly
-//      reloaded page pick up an in-flight turn without the rest of the
-//      reply disappearing.
+//  1. Replay: session_events rows with seq > since (or > Last-Event-ID)
+//     that the client missed before connecting. Lets a freshly
+//     reloaded page pick up an in-flight turn without the rest of the
+//     reply disappearing.
 //
-//   2. Live agent chat events from the hub — every emitEvent call from
-//      the agent loop fans through here. This covers both the
-//      synchronous POST /api/chat/stream path AND turns started by
-//      other tabs / cron firings, so any open chat panel sees them
-//      regardless of who triggered the work.
+//  2. Live agent chat events from the hub — every emitEvent call from
+//     the agent loop fans through here. This covers both the
+//     synchronous POST /api/chat/stream path AND turns started by
+//     other tabs / cron firings, so any open chat panel sees them
+//     regardless of who triggered the work.
 //
-//   3. Legacy WebChannel bus messages — cron-fired final replies that
-//      route through bus.Outbound rather than the chat-event path.
-//      Kept so we don't lose pre-existing functionality during the
-//      transition.
+//  3. Legacy WebChannel bus messages — cron-fired final replies that
+//     route through bus.Outbound rather than the chat-event path.
+//     Kept so we don't lose pre-existing functionality during the
+//     transition.
 //
 // Auth gating reuses resolveAgent, so the caller must already have
 // permission to chat with this agent. The subscription doesn't
@@ -1431,9 +1433,9 @@ func (s *Server) readWorkspaceFileBytes(ctx context.Context, agentID, relPath st
 // parseTodoMarkdown extracts checkbox lines from a todo.md body and
 // returns them as structured items. Conventions:
 //
-//	- [ ] text   → pending
-//	- [x] text   → completed
-//	- [X] text   → completed (case-insensitive)
+//   - [ ] text   → pending
+//   - [x] text   → completed
+//   - [X] text   → completed (case-insensitive)
 //
 // Anything else (heading lines, blank lines, non-checkbox bullets) is
 // ignored — todo.md doubles as a human-readable plan document, so we

@@ -249,18 +249,40 @@ func TestProcessDueJobs_Cron(t *testing.T) {
 }
 
 func TestNextCronOccurrence(t *testing.T) {
+	// nextCronOccurrence is the legacy helper that evaluates the cron
+	// expression in the process's server-local time. The Go `time`
+	// package reads `TZ` once and caches `time.Local` for the lifetime
+	// of the process, so t.Setenv("TZ", "UTC") alone is not enough on
+	// hosts whose default zone isn't UTC. Pin the first subtest to an
+	// explicit UTC location and assert the result in UTC, then exercise
+	// the server-local branch with `time.Local` so the assertion is
+	// valid on any host.
+	utc, err := time.LoadLocation("UTC")
+	if err != nil {
+		t.Fatalf("LoadLocation(UTC): %v", err)
+	}
+	now := time.Date(2026, 5, 6, 10, 3, 0, 0, utc)
+
 	// Test "every 2 minutes" cron
-	now := time.Date(2026, 5, 6, 10, 3, 0, 0, time.UTC)
 	next := nextCronOccurrence("*/2 * * * *", now)
-	if next.Minute() != 4 {
-		t.Errorf("expected minute=4, got %d (time=%v)", next.Minute(), next)
+	if next.In(utc).Minute() != 4 {
+		t.Errorf("expected minute=4, got %d (time=%v)", next.In(utc).Minute(), next)
 	}
 
-	// Test "daily at 9:00"
-	now = time.Date(2026, 5, 6, 9, 1, 0, 0, time.UTC)
+	// Test "daily at 9:00" using server-local time. On a UTC host the
+	// answer is 2026-05-07 09:00 local; on a non-UTC host the "next 9
+	// AM" answer is the same wall-clock reading one day later, so
+	// asserting relative to the local clock (next day at 9:00) works
+	// everywhere. Skip the assertion across month boundaries to keep
+	// the test simple — the goal is the cron math, not date arithmetic.
+	now = time.Date(2026, 5, 6, 9, 1, 0, 0, time.Local)
+	wantDay := now.Day() + 1
+	if now.Day() >= 28 {
+		t.Skip("month-boundary edge case; covered by calendar-aware tests elsewhere")
+	}
 	next = nextCronOccurrence("0 9 * * *", now)
-	if next.Day() != 7 || next.Hour() != 9 {
-		t.Errorf("expected next day 9:00, got %v", next)
+	if next.Day() != wantDay || next.Hour() != 9 || next.Minute() != 0 {
+		t.Errorf("expected next day 9:00 (day=%d), got %v", wantDay, next)
 	}
 }
 

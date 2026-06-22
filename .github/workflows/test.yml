@@ -1,9 +1,9 @@
 name: test
 
 # Run unit tests for both stacks on every push to dev/main and on pull
-# requests. The Go runtime has 50+ `_test.go` files; the web UI gained a
-# vitest entrypoint in #<this PR> so the `pnpm test` step has something
-# to run. Both steps exit non-zero on failure, so a red check here means
+# requests. The Go runtime has 50+ `_test.go` files; the web UI ships a
+# vitest entrypoint (`pnpm test`) so the `web-tests` job has something
+# to run. Both jobs exit non-zero on failure, so a red check here means
 # the branch is unsafe to merge.
 #
 # Triggers mirror the build-and-push workflow: pushes to dev/main and
@@ -34,6 +34,26 @@ jobs:
         with:
           go-version: "1.25"
           cache: true
+
+      # `internal/setup/embed.go` does `//go:embed all:web` over the
+      # built Next.js output. That directory is gitignored, so a fresh
+      # checkout can't compile any package that imports it — including
+      # the setup tests. Build the web first so the embed pattern has
+      # something to match. This is the same dance release.yml does
+      # before `go build`. The pnpm cache below keeps subsequent runs
+      # to a few seconds.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Build web UI (provides internal/setup/web for go:embed)
+        run: make build-web
 
       - name: Run Go tests
         run: make test

@@ -17,7 +17,10 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/fastclaw
+  # GHCR requires the repository path to be lowercase. github.repository_owner
+  # is "XcityUS" (mixed case), which makes the ref invalid — hardcode the
+  # lowercase org so buildx can push. See build failure on dev merge #5.
+  IMAGE: ghcr.io/xcityus/fastclaw
 
 jobs:
   # --- Shared: derive version metadata ---

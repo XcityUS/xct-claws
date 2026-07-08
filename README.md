@@ -142,6 +142,7 @@ table and is edited through the dashboard or `fastclaw agents config`.
 
 ### API
 - OpenAI-compatible `/v1/chat/completions` (streaming)
+- Upstream app integration contract: [`docs/upstream-api.md`](docs/upstream-api.md)
 - Web chat `/api/chat/stream` (SSE)
 - Live agent push via `/api/chat/subscribe` (SSE) — surfaces cron-fired and other async replies into the open chat panel without a refresh
 - Session management `/api/chat/sessions`
@@ -174,6 +175,12 @@ database and is edited through the dashboard or `fastclaw agents config`.
 | `FASTCLAW_STORAGE_TYPE` | `sqlite` | `sqlite` or `postgres`. |
 | `FASTCLAW_STORAGE_DSN` | empty | Postgres DSN, e.g. `postgres://u:p@host:5432/db?sslmode=disable`. Empty = sqlite at `$FASTCLAW_HOME/fastclaw.db`. |
 | `FASTCLAW_STORAGE_AUTO_MIGRATE` | `true` | Apply schema migrations on boot. |
+| `FASTCLAW_REDIS_ENABLED` | `false` | Enable Redis-backed channel leases and Redis Stream message bus. Setting `FASTCLAW_REDIS_ADDR` also enables it. |
+| `FASTCLAW_REDIS_ADDR` | `127.0.0.1:6379` when enabled | Redis address used by multi-replica channel locks and shared inbound/outbound delivery streams. |
+| `FASTCLAW_REDIS_USERNAME` | empty | Redis ACL username, if required. |
+| `FASTCLAW_REDIS_PASSWORD` | empty | Redis password, if required. |
+| `FASTCLAW_REDIS_DB` | `0` | Redis logical database number. |
+| `FASTCLAW_REDIS_PREFIX` | `fastclaw` | Prefix for Redis stream and lease keys. |
 | `FASTCLAW_SANDBOX_ENABLED` | dashboard | Override the Settings → Runtime toggle. |
 | `FASTCLAW_SANDBOX_BACKEND` | dashboard | `docker` or `e2b`. |
 | `FASTCLAW_SANDBOX_IMAGE` | dashboard | Docker image (Docker backend) or template id (E2B). |

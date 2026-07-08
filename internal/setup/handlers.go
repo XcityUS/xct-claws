@@ -52,6 +52,9 @@ func (s *Server) loadUserConfig(r *http.Request) (*config.Config, error) {
 			return nil, err
 		}
 	}
+	if err := scope.SettingInto(r.Context(), s.dataStore, scope.PrefsNamespace, uid, "", &cfg.Prefs); err != nil {
+		return nil, err
+	}
 	if provs, err := scope.Providers(r.Context(), s.dataStore, uid, ""); err == nil {
 		for k, v := range provs {
 			cfg.Providers[k] = v
@@ -508,6 +511,7 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	if s.dataStore != nil {
 		_ = scope.SettingInto(r.Context(), s.dataStore, "agents.defaults", "", "", &sysDefaults)
 	}
+	serverTimezone := time.Local.String()
 	// Marshal-then-extend keeps the response shape compatible (existing
 	// callers ignore the extra `meta` key) without forcing a refactor of
 	// config.Config to carry presentation metadata.
@@ -516,6 +520,7 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal(blob, &out)
 	out["meta"] = map[string]any{
 		"systemDefaultModel": sysDefaults.Model,
+		"serverTimezone":     serverTimezone,
 	}
 	jsonResponse(w, http.StatusOK, out)
 }
@@ -535,6 +540,23 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		jsonResponse(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
 		return
+	}
+	var raw struct {
+		Prefs   *config.PrefsCfg `json:"prefs"`
+		Sandbox *json.RawMessage `json:"sandbox"`
+		Skills  *struct {
+			AgentEntries map[string]map[string]config.SkillEntryCfg `json:"agentEntries"`
+		} `json:"skills"`
+	}
+	_ = json.Unmarshal(buf, &raw)
+	if raw.Prefs != nil {
+		raw.Prefs.Timezone = strings.TrimSpace(raw.Prefs.Timezone)
+		if raw.Prefs.Timezone != "" {
+			if _, err := time.LoadLocation(raw.Prefs.Timezone); err != nil {
+				jsonResponse(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid timezone: use an IANA name like Asia/Shanghai"})
+				return
+			}
+		}
 	}
 	merged, err := s.loadUserConfig(r)
 	if err != nil {
@@ -558,12 +580,18 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	// name=skills.entries). Pull from the raw body — not from the
 	// merged Config — so we only touch agents the caller actually
 	// patched, and don't echo every existing override back as a write.
-	var raw struct {
-		Skills *struct {
-			AgentEntries map[string]map[string]config.SkillEntryCfg `json:"agentEntries"`
-		} `json:"skills"`
+	if raw.Prefs != nil {
+		sc, scopeID := s.scopeForSave(r)
+		uid, aid := scope.OwnershipFromScope(sc, scopeID)
+		data := map[string]interface{}{}
+		if raw.Prefs.Timezone != "" {
+			data["timezone"] = raw.Prefs.Timezone
+		}
+		if err := scope.SaveSetting(r.Context(), s.dataStore, uid, aid, scope.PrefsNamespace, data); err != nil {
+			jsonResponse(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
 	}
-	_ = json.Unmarshal(buf, &raw)
 	if raw.Skills != nil && raw.Skills.AgentEntries != nil {
 		for agentID, entries := range raw.Skills.AgentEntries {
 			rec, err := s.dataStore.GetAgent(r.Context(), agentID)
@@ -585,8 +613,25 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 	// agent loaded before the change keeps seeing the stale model and
 	// surfaces "no usable LLM provider" in chat.
 	sc, scopeID := s.scopeForSave(r)
+	if sc == scope.System && raw.Sandbox != nil {
+		if err := s.reloadSystemSandbox(); err != nil {
+			jsonResponse(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+	}
 	s.invalidateScope(sc, scopeID)
 	jsonResponse(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) reloadSystemSandbox() error {
+	type sandboxReloader interface{ ReloadSandbox() error }
+	if s.userResolver == nil {
+		return nil
+	}
+	if r, ok := s.userResolver.(sandboxReloader); ok {
+		return r.ReloadSandbox()
+	}
+	return nil
 }
 
 // scopeForSave mirrors the scope-resolution logic in saveUserConfig so
@@ -694,27 +739,60 @@ func (s *Server) handleTestStoredProvider(w http.ResponseWriter, r *http.Request
 func runProviderTest(ctx context.Context, req testProviderRequest) map[string]any {
 	base := provider.NormalizeAPIBase(req.APIBase, req.APIType)
 	var testURL string
-	var body io.Reader
+	var payload string
 	if req.APIType == "anthropic-messages" {
 		testURL = base + "/v1/messages"
 		model := req.Model
 		if model == "" {
 			model = "claude-sonnet-4-20250514"
 		}
-		payload := fmt.Sprintf(`{"model":"%s","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`, model)
-		body = strings.NewReader(payload)
+		payload = fmt.Sprintf(`{"model":"%s","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`, model)
 	} else {
 		testURL = base + "/chat/completions"
 		model := req.Model
 		if model == "" {
 			model = "gpt-4o-mini"
 		}
-		payload := fmt.Sprintf(`{"model":"%s","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`, model)
-		body = strings.NewReader(payload)
+		payload = openAIProviderTestPayload(model, false)
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", testURL, body)
+	respBody, statusCode, err := sendProviderTestRequest(ctx, req, testURL, payload)
 	if err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}
+	}
+	if req.APIType != "anthropic-messages" && statusCode >= 400 && shouldRetryProviderTestWithMaxCompletionTokens(respBody) {
+		model := req.Model
+		if model == "" {
+			model = "gpt-4o-mini"
+		}
+		respBody, statusCode, err = sendProviderTestRequest(ctx, req, testURL, openAIProviderTestPayload(model, true))
+		if err != nil {
+			return map[string]any{"ok": false, "error": err.Error()}
+		}
+	}
+
+	if statusCode < 200 || statusCode >= 300 {
+		return map[string]any{
+			"ok":    false,
+			"error": fmt.Sprintf("HTTP %d: %s", statusCode, truncate(strings.TrimSpace(string(respBody)), 240)),
+		}
+	}
+	if err := validateProviderTestBody(req.APIType, respBody); err != nil {
+		return map[string]any{"ok": false, "error": err.Error()}
+	}
+	return map[string]any{"ok": true}
+}
+
+func openAIProviderTestPayload(model string, maxCompletionTokens bool) string {
+	if maxCompletionTokens {
+		return fmt.Sprintf(`{"model":"%s","max_completion_tokens":16,"messages":[{"role":"user","content":"hi"}]}`, model)
+	}
+	return fmt.Sprintf(`{"model":"%s","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`, model)
+}
+
+func sendProviderTestRequest(ctx context.Context, req testProviderRequest, testURL, payload string) ([]byte, int, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", testURL, strings.NewReader(payload))
+	if err != nil {
+		return nil, 0, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	if req.APIType == "anthropic-messages" {
@@ -728,20 +806,16 @@ func runProviderTest(ctx context.Context, req testProviderRequest) map[string]an
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return map[string]any{"ok": false, "error": err.Error()}
+		return nil, 0, err
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return map[string]any{
-			"ok":    false,
-			"error": fmt.Sprintf("HTTP %d: %s", resp.StatusCode, truncate(strings.TrimSpace(string(respBody)), 240)),
-		}
-	}
-	if err := validateProviderTestBody(req.APIType, respBody); err != nil {
-		return map[string]any{"ok": false, "error": err.Error()}
-	}
-	return map[string]any{"ok": true}
+	return respBody, resp.StatusCode, nil
+}
+
+func shouldRetryProviderTestWithMaxCompletionTokens(body []byte) bool {
+	lower := strings.ToLower(string(body))
+	return strings.Contains(lower, "max_tokens") && strings.Contains(lower, "max_completion_tokens")
 }
 
 // validateProviderTestBody confirms the 2xx body is a real Messages /
@@ -1075,6 +1149,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	defer keepalive.Stop()
 
 	clientGone := r.Context().Done()
+	forwardedAny := false
 	// turnPending flips on when the slash handler reports it queued a
 	// continuation via bus.Inbound (`turn_pending` event). The POST
 	// goroutine's HandleMessage has already returned, but the real
@@ -1111,9 +1186,12 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 						continue
 					}
 					if env.Event.Type == "done" {
+						forwardEvent(w, flusher, env)
+						forwardedAny = true
 						return
 					}
 					forwardEvent(w, flusher, env)
+					forwardedAny = true
 				default:
 					break drain
 				}
@@ -1125,6 +1203,12 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 				// (15-min timeout) is the upper bound if it never lands.
 				agentDone = nil
 				continue
+			}
+			if !forwardedAny {
+				forwardSyntheticEvent(w, flusher, agent.ChatEvent{
+					Type: "error",
+					Data: map[string]any{"message": "agent finished without emitting a response"},
+				})
 			}
 			return
 		case <-agentCtx.Done():
@@ -1144,6 +1228,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			forwardEvent(w, flusher, env)
+			forwardedAny = true
 			if env.Event.Type == "done" {
 				return
 			}
@@ -1170,6 +1255,10 @@ func forwardEvent(w http.ResponseWriter, flusher http.Flusher, env agent.EventEn
 	}
 	fmt.Fprintf(w, "data: %s\n\n", data)
 	flusher.Flush()
+}
+
+func forwardSyntheticEvent(w http.ResponseWriter, flusher http.Flusher, evt agent.ChatEvent) {
+	forwardEvent(w, flusher, agent.EventEnvelope{Seq: -1, Event: evt})
 }
 
 // handleChatSubscribe holds an SSE connection open for one (agent,
@@ -1515,6 +1604,146 @@ func (s *Server) handleChatSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{"sessions": ag.WebChatSessions()})
+}
+
+// handleChats returns chat sessions scoped by the caller's API key type:
+//   - admin key: all sessions across all users and agents
+//   - user key:  all sessions for agents owned by the key's user
+//   - agent key: all sessions for agents in the key's ACL
+//
+// Session-based callers (browser) get the same scoping as user keys.
+func (s *Server) handleChats(w http.ResponseWriter, r *http.Request) {
+	if s.dataStore == nil {
+		jsonResponse(w, http.StatusServiceUnavailable, map[string]any{"error": "no data store"})
+		return
+	}
+	ident, ok := auth.FromContext(r.Context())
+	if !ok {
+		jsonResponse(w, http.StatusUnauthorized, map[string]any{"error": "unauthorized"})
+		return
+	}
+
+	// Pagination: ?page=1&pageSize=30 (1-based, defaults to page 1, 30 per page).
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 30
+	}
+
+	// Resolve which agent IDs the caller may see.
+	var agentIDs []string // nil = all (admin)
+	switch {
+	case ident.AuthMethod == "apikey" && ident.APIKeyType == users.APIKeyTypeAdmin:
+		agentIDs = nil // admin sees everything
+	case ident.AuthMethod == "apikey" && ident.APIKeyType == users.APIKeyTypeAgent:
+		agentIDs = ident.APIKeyAgents
+	default:
+		uid := ident.EffectiveUserID()
+		agents, agentsErr := s.dataStore.ListAgents(r.Context(), uid)
+		if agentsErr != nil {
+			jsonResponse(w, http.StatusInternalServerError, map[string]any{"error": agentsErr.Error()})
+			return
+		}
+		agentIDs = make([]string, len(agents))
+		for i, a := range agents {
+			agentIDs[i] = a.ID
+		}
+	}
+
+	offset := (page - 1) * pageSize
+	metas, total, err := s.dataStore.ListSessionsPaginated(r.Context(), agentIDs, offset, pageSize)
+	if err != nil {
+		jsonResponse(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	ownerCache := map[string]*users.Account{}
+	resolveOwner := func(uid string) *users.Account {
+		if uid == "" {
+			return nil
+		}
+		if a, ok := ownerCache[uid]; ok {
+			return a
+		}
+		a, _ := s.accounts.Get(r.Context(), uid)
+		ownerCache[uid] = a
+		return a
+	}
+	agentCache := map[string]*store.AgentRecord{}
+	resolveAgentRec := func(agentID string) *store.AgentRecord {
+		if agentID == "" {
+			return nil
+		}
+		if a, ok := agentCache[agentID]; ok {
+			return a
+		}
+		a, _ := s.dataStore.GetAgent(r.Context(), agentID)
+		agentCache[agentID] = a
+		return a
+	}
+
+	out := make([]map[string]any, 0, len(metas))
+	for _, m := range metas {
+		ag := resolveAgentRec(m.AgentID)
+		if ag == nil {
+			continue
+		}
+		// Build preview from first user message.
+		adapter := session.NewStoreAdapter(s.dataStore, m.UserID)
+		ws := adapter.BuildWebSession(r.Context(), m)
+		if ws == nil {
+			continue
+		}
+		owner := resolveOwner(m.UserID)
+		entry := map[string]any{
+			"id":           ws.ID,
+			"agentId":      m.AgentID,
+			"agentName":    ag.Name,
+			"userId":       m.UserID,
+			"channel":      ws.Channel,
+			"accountId":    ws.AccountID,
+			"chatId":       ws.ChatID,
+			"projectId":    ws.ProjectID,
+			"title":        ws.Title,
+			"preview":      ws.Preview,
+			"thumbnailUrl": ws.ThumbnailURL,
+			"createdAt":    ws.CreatedAt,
+			"updatedAt":    ws.UpdatedAt,
+		}
+		if ws.ChatterUserID != "" {
+			entry["chatterUserId"] = ws.ChatterUserID
+			if chatter := resolveOwner(ws.ChatterUserID); chatter != nil {
+				if chatter.ExternalID != "" {
+					entry["chatterExternalId"] = chatter.ExternalID
+				}
+				if chatter.DisplayName != "" {
+					entry["chatterDisplayName"] = chatter.DisplayName
+				}
+			}
+		}
+		if owner != nil {
+			entry["ownerUsername"] = owner.Username
+			entry["ownerEmail"] = owner.Email
+			if owner.ExternalID != "" {
+				entry["ownerExternalId"] = owner.ExternalID
+			}
+			if owner.DisplayName != "" {
+				entry["ownerDisplayName"] = owner.DisplayName
+			}
+		}
+		out = append(out, entry)
+	}
+	totalPages := (total + pageSize - 1) / pageSize
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"sessions":   out,
+		"page":       page,
+		"pageSize":   pageSize,
+		"total":      total,
+		"totalPages": totalPages,
+	})
 }
 
 func (s *Server) handleRenameSession(w http.ResponseWriter, r *http.Request) {

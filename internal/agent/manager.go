@@ -47,6 +47,7 @@ type managerOpts struct {
 	workspaceStore  workspace.Store
 	dataStore       store.Store
 	meter           usage.Meter
+	quotaStore      usage.QuotaStore
 	userID          string
 	globalSkillsCfg config.SkillsCfg
 }
@@ -88,6 +89,14 @@ func WithDataStore(st store.Store) ManagerOption {
 // to disable metering (tests, single-user dev runs).
 func WithMeter(m usage.Meter) ManagerOption {
 	return func(o *managerOpts) { o.meter = m }
+}
+
+// WithQuotaStore installs per-user billing quota enforcement on every
+// agent. The agent loop checks the owner's quota before processing a
+// turn — when exceeded, the user gets a friendly rejection and no LLM
+// tokens are burned. Omit to disable quota enforcement.
+func WithQuotaStore(qs usage.QuotaStore) ManagerOption {
+	return func(o *managerOpts) { o.quotaStore = qs }
 }
 
 // WithGlobalSkillsCfg propagates cfg.Skills (entries + agentEntries
@@ -202,6 +211,13 @@ func (m *Manager) buildAgent(rc config.ResolvedAgent, prov provider.Provider, mb
 		// page (keyed on the agent owner) would never see them.
 		ag.registry.SetOwnerUserID(m.uid)
 		ag.registry.SetAgentOwnerUserID(rc.UserID)
+		// Owner-uploaded knowledge base: registered only when the store
+		// can search it. The prompt's knowledge index section tells the
+		// model when to call it (large corpora); small corpora are
+		// injected in full and the tool goes unused.
+		if searcher, ok := m.opts.memoryStore.(tools.KnowledgeSearcher); ok {
+			tools.RegisterKnowledgeSearch(ag.registry, searcher)
+		}
 	}
 	if m.opts.workspaceStore != nil {
 		ag.registry.SetWorkspaceStore(m.opts.workspaceStore, rc.ID)
@@ -227,6 +243,7 @@ func (m *Manager) buildAgent(rc config.ResolvedAgent, prov provider.Provider, mb
 		// scheduling resolve through. Needs the relational store, so it
 		// rides the same guard as cron.
 		tools.RegisterTimezoneTool(ag.registry, m.opts.dataStore)
+		tools.RegisterPreferenceTool(ag.registry, m.opts.dataStore)
 		// /goal feature: token-accounting hook + update_goal tool, all
 		// keyed on the agent's owner (set above by SetOwnerUserID).
 		// Same dataStore guard as cron because both features need the
@@ -247,6 +264,10 @@ func (m *Manager) buildAgent(rc config.ResolvedAgent, prov provider.Provider, mb
 	ag.agentID = rc.ID
 	if m.opts.meter != nil {
 		ag.SetMeter(m.opts.meter)
+		tools.RegisterBillingTools(ag.registry, m.opts.meter, m.opts.quotaStore)
+	}
+	if m.opts.quotaStore != nil {
+		ag.SetQuotaStore(m.opts.quotaStore)
 	}
 	return ag
 }

@@ -200,6 +200,23 @@ func (s *Server) agentScopeAutoPersist(r *http.Request, agentID string) *bool {
 	return &v
 }
 
+// agentScopeSharedIdentity returns true when ANY channel bound to this
+// agent has shared_identity enabled. The toggle is conceptually agent-
+// level (Context page) but physically stored per-channel so the gateway
+// routing hot-path can read it without an extra DB lookup.
+func (s *Server) agentScopeSharedIdentity(r *http.Request, ownerUserID, agentID string) bool {
+	chs, err := s.dataStore.ListChannels(r.Context(), ownerUserID, agentID)
+	if err != nil {
+		return false
+	}
+	for _, ch := range chs {
+		if ch.SharedIdentity {
+			return true
+		}
+	}
+	return false
+}
+
 // effectiveUserID returns the resolved user_id for the request: the
 // caller's own id, or — for super_admin in actAs mode — the impersonated
 // user's id.
@@ -460,11 +477,11 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Name              string    `json:"name,omitempty"`
-		Description       *string   `json:"description,omitempty"` // ptr so empty-string clears it
-		Model             *string   `json:"model,omitempty"`       // ptr so empty-string clears the agent-scope override
-		IsPublic          *bool     `json:"isPublic,omitempty"`    // ptr so caller can leave it unchanged
-		ShareModelConfig  *bool     `json:"shareModelConfig,omitempty"`
+		Name             string  `json:"name,omitempty"`
+		Description      *string `json:"description,omitempty"` // ptr so empty-string clears it
+		Model            *string `json:"model,omitempty"`       // ptr so empty-string clears the agent-scope override
+		IsPublic         *bool   `json:"isPublic,omitempty"`    // ptr so caller can leave it unchanged
+		ShareModelConfig *bool   `json:"shareModelConfig,omitempty"`
 		// PromptMode is a ptr so the caller can distinguish "leave
 		// unchanged" (omitted / null) from "clear override" (empty
 		// string). Allowed string values: "agent" | "chatbot" |
@@ -484,12 +501,21 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		// system default (currently effectively disabled).
 		AutoPersist      *bool `json:"autoPersist,omitempty"`
 		AutoPersistReset bool  `json:"autoPersistReset,omitempty"`
+		// SharedIdentity toggles cross-channel session/memory sharing.
+		// When true, all channels bound to this agent use the channel
+		// owner's user_id as the chatter identity, so sessions and
+		// memory are shared across web + IM channels. Default false.
+		SharedIdentity *bool `json:"sharedIdentity,omitempty"`
 		// Plugins per-agent enable overlay. Keys are plugin IDs, values
 		// are bool. Patch semantics: only the keys present in this map
 		// get written; other keys in the existing row are preserved.
 		// To clear all overrides for this agent, send pluginsReset:true.
 		Plugins      map[string]bool `json:"plugins,omitempty"`
 		PluginsReset bool            `json:"pluginsReset,omitempty"`
+		// MCPServers is a whole-map replace: omit to leave untouched,
+		// send {} to clear, or send the full desired map to replace.
+		MCPServers      map[string]config.MCPServerConfig `json:"mcpServers,omitempty"`
+		MCPServersReset bool                              `json:"mcpServersReset,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonResponse(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
@@ -529,6 +555,21 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 			delete(rec.Config, "shareModelConfig")
 		} else {
 			rec.Config["shareModelConfig"] = false
+		}
+	}
+	// MCP servers: whole-map replace into the agent config blob.
+	if req.MCPServersReset {
+		if rec.Config != nil {
+			delete(rec.Config, "mcpServers")
+		}
+	} else if req.MCPServers != nil {
+		if rec.Config == nil {
+			rec.Config = map[string]interface{}{}
+		}
+		if len(req.MCPServers) == 0 {
+			delete(rec.Config, "mcpServers")
+		} else {
+			rec.Config["mcpServers"] = req.MCPServers
 		}
 	}
 	if err := s.dataStore.SaveAgent(r.Context(), rec); err != nil {
@@ -590,6 +631,16 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// SharedIdentity: batch-update all channels for this agent.
+	if req.SharedIdentity != nil {
+		chs, _ := s.dataStore.ListChannels(r.Context(), rec.UserID, rec.ID)
+		for i := range chs {
+			if chs[i].SharedIdentity != *req.SharedIdentity {
+				chs[i].SharedIdentity = *req.SharedIdentity
+				_ = s.dataStore.SaveChannel(r.Context(), &chs[i])
+			}
+		}
+	}
 	// invalidateAgent (not invalidateUser) so super_admin / public-link
 	// viewers / apikey callers that lazy-attached this agent into their
 	// own UserSpace also drop their stale rc.Model — without this they
@@ -605,6 +656,7 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 			"promptMode":       s.agentScopePromptMode(r, rec.ID),
 			"splitReplies":     s.agentScopeSplitReplies(r, rec.ID),
 			"autoPersist":      s.agentScopeAutoPersist(r, rec.ID),
+			"sharedIdentity":   s.agentScopeSharedIdentity(r, rec.UserID, rec.ID),
 			"plugins":          s.agentScopePlugins(r, rec.ID),
 			"config":           rec.Config,
 			"isPublic":         rec.IsPublic,
@@ -645,6 +697,7 @@ func (s *Server) handleGetAgent(w http.ResponseWriter, r *http.Request) {
 			"promptMode":       s.agentScopePromptMode(r, rec.ID),
 			"splitReplies":     s.agentScopeSplitReplies(r, rec.ID),
 			"autoPersist":      s.agentScopeAutoPersist(r, rec.ID),
+			"sharedIdentity":   s.agentScopeSharedIdentity(r, rec.UserID, rec.ID),
 			"plugins":          s.agentScopePlugins(r, rec.ID),
 			"avatarUrl":        "/api/agents/" + rec.ID + "/files/avatar.png",
 			"createdAt":        rec.CreatedAt,
@@ -708,13 +761,13 @@ func (s *Server) handleDeleteAgent(w http.ResponseWriter, r *http.Request) {
 var agentSystemFileAllowlist = map[string]bool{
 	"SOUL.md": true, "IDENTITY.md": true, "AGENTS.md": true,
 	"BOOTSTRAP.md": true, "TOOLS.md": true, "MEMORY.md": true,
-	"HEARTBEAT.md": true, "USER.md": true, "agent.json": true,
+	"HEARTBEAT.md": true, "USER.md": true, "KNOWLEDGE.md": true, "agent.json": true,
 }
 
 var agentIdentityFiles = map[string]bool{
 	"SOUL.md": true, "IDENTITY.md": true, "AGENTS.md": true,
 	"BOOTSTRAP.md": true, "TOOLS.md": true, "HEARTBEAT.md": true,
-	"agent.json": true,
+	"KNOWLEDGE.md": true, "agent.json": true,
 }
 
 func (s *Server) handleGetAgentSystemFile(w http.ResponseWriter, r *http.Request) {
@@ -799,6 +852,12 @@ func (s *Server) handlePutAgentSystemFile(w http.ResponseWriter, r *http.Request
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		jsonResponse(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	if name == "KNOWLEDGE.md" && len([]byte(body.Content)) > maxKnowledgeFileBytes {
+		jsonResponse(w, http.StatusRequestEntityTooLarge, map[string]any{
+			"error": "KNOWLEDGE.md is too large; maximum size is 256KB",
+		})
 		return
 	}
 	target, ok := s.resolveSystemFileTarget(w, r, id, name)
@@ -945,15 +1004,15 @@ func (s *Server) handleAgentFileList(w http.ResponseWriter, r *http.Request) {
 // file browser / zip filter. acceptPath returns true for paths the
 // scope considers in-bounds:
 //
-//   loose chat:  paths under sessions/<chat_id>/
-//   project chat: paths under projects/<pid>/<chat_id>/ (the chat's
-//                 own files), PLUS files directly at projects/<pid>/
-//                 (project-root "shared/legacy" files — pre-subdir
-//                 layout still lives there, and operators may
-//                 deliberately drop shared files at the root). Other
-//                 chats' subdirs (projects/<pid>/<other-sid>/...)
-//                 are excluded — those belong to that chat's panel.
-//   no session:  everything (admin browser).
+//	loose chat:  paths under sessions/<chat_id>/
+//	project chat: paths under projects/<pid>/<chat_id>/ (the chat's
+//	              own files), PLUS files directly at projects/<pid>/
+//	              (project-root "shared/legacy" files — pre-subdir
+//	              layout still lives there, and operators may
+//	              deliberately drop shared files at the root). Other
+//	              chats' subdirs (projects/<pid>/<other-sid>/...)
+//	              are excluded — those belong to that chat's panel.
+//	no session:  everything (admin browser).
 //
 // archiveSuffix returns the human-readable scope id used in the zip
 // filename — chat_id for loose chats, "<pid>-<chat_id>" for project
@@ -1264,6 +1323,18 @@ func (s *Server) handleAgentFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.requireAgentReadable(w, r, id) {
+		return
+	}
+	// Never serve a file named SKILL.md as a downloadable artifact. Skill
+	// manifests are the agent's IP and never legitimately land in the
+	// workspace (skill-creator writes them to the skills bucket, not here),
+	// so a SKILL.md showing up under /workspace is the tail of the
+	// `cat /skills/foo/SKILL.md > /workspace/foo.md` exfil chain. This is a
+	// name-level guard only — it does not catch manifest content saved
+	// under a different filename; that residual is the model-cooperation
+	// case the load_skill / system-prompt confidentiality directives cover.
+	if strings.EqualFold(filepath.Base(filepath.Clean(rel)), "SKILL.md") {
+		jsonResponse(w, http.StatusForbidden, map[string]any{"error": "refused: skill manifests are not downloadable"})
 		return
 	}
 	if s.workspaceStore != nil {

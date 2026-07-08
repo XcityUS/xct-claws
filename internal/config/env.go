@@ -18,6 +18,7 @@ type EnvConfig struct {
 	Gateway EnvGateway
 	Storage EnvStorage
 	Sandbox EnvSandbox
+	Redis   EnvRedis
 	Log     EnvLog
 	OIDC    EnvOIDC
 }
@@ -33,6 +34,15 @@ type EnvStorage struct {
 	AutoMigrate bool   // FASTCLAW_STORAGE_AUTO_MIGRATE — default true
 }
 
+type EnvRedis struct {
+	Enabled  bool   // FASTCLAW_REDIS_ENABLED — enable Redis-backed bus + leases
+	Addr     string // FASTCLAW_REDIS_ADDR    — host:port, e.g. redis:6379
+	Username string // FASTCLAW_REDIS_USERNAME
+	Password string // FASTCLAW_REDIS_PASSWORD
+	DB       int    // FASTCLAW_REDIS_DB
+	Prefix   string // FASTCLAW_REDIS_PREFIX  — key prefix, default "fastclaw"
+}
+
 type EnvSandbox struct {
 	Enabled         bool   // FASTCLAW_SANDBOX_ENABLED
 	Backend         string // FASTCLAW_SANDBOX_BACKEND  — "docker", "e2b", or "boxlite"
@@ -45,7 +55,8 @@ type EnvSandbox struct {
 }
 
 type EnvLog struct {
-	Level string // FASTCLAW_LOG_LEVEL — "debug" / "info" / "warn" / "error"
+	Level string // FASTCLAW_LOG_LEVEL    — "debug" / "info" / "warn" / "error"
+	Debug bool   // FASTCLAW_DEBUG_MODE   — enable verbose debug output (prompt dump, etc.)
 }
 
 // EnvOIDC configures "Sign in with Xcity" — XCT Claw acting as an OAuth 2.1 /
@@ -96,6 +107,28 @@ func LoadEnv() *EnvConfig {
 		cfg.Storage.AutoMigrate = v == "true" || v == "1"
 	}
 
+	if v := os.Getenv("FASTCLAW_REDIS_ENABLED"); v != "" {
+		cfg.Redis.Enabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("FASTCLAW_REDIS_ADDR"); v != "" {
+		cfg.Redis.Addr = v
+		cfg.Redis.Enabled = true
+	}
+	if v := os.Getenv("FASTCLAW_REDIS_USERNAME"); v != "" {
+		cfg.Redis.Username = v
+	}
+	if v := os.Getenv("FASTCLAW_REDIS_PASSWORD"); v != "" {
+		cfg.Redis.Password = v
+	}
+	if v := os.Getenv("FASTCLAW_REDIS_DB"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Redis.DB = n
+		}
+	}
+	if v := os.Getenv("FASTCLAW_REDIS_PREFIX"); v != "" {
+		cfg.Redis.Prefix = v
+	}
+
 	if v := os.Getenv("FASTCLAW_SANDBOX_ENABLED"); v != "" {
 		cfg.Sandbox.Enabled = v == "true" || v == "1"
 	}
@@ -140,6 +173,9 @@ func LoadEnv() *EnvConfig {
 		// entitlement, not on a scope. See the integration design doc.
 		cfg.OIDC.Scopes = "openid profile email"
 	}
+	if v := os.Getenv("FASTCLAW_DEBUG_MODE"); v == "true" || v == "1" {
+		cfg.Log.Debug = true
+	}
 	return cfg
 }
 
@@ -181,6 +217,15 @@ func applyObjectStoreEnv(cfg *Config) {
 	}
 }
 
+// debugMode is read once at package init. All debug-gated output in
+// the codebase checks this via DebugMode().
+var debugMode = os.Getenv("FASTCLAW_DEBUG_MODE") == "true" || os.Getenv("FASTCLAW_DEBUG_MODE") == "1"
+
+// DebugMode returns true when FASTCLAW_DEBUG_MODE=true|1. Use this to
+// gate verbose output (prompt dumps, request traces, etc.) that is
+// useful during development but noisy in production.
+func DebugMode() bool { return debugMode }
+
 // ScrubBootSecrets removes credential-bearing env vars from the
 // process environment AFTER bootstrap config has been read. Call once
 // from the daemon entry point after gateway construction.
@@ -211,6 +256,7 @@ func ScrubBootSecrets() {
 		"FASTCLAW_OBJECT_STORE_ENDPOINT",
 		"FASTCLAW_OBJECT_STORE_USESSL",
 		"FASTCLAW_OBJECT_STORE_ALIYUN_INTERNAL",
+		"FASTCLAW_REDIS_PASSWORD",
 		"BOXLITE_API_KEY",
 		"E2B_API_KEY",
 	}

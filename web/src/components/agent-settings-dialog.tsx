@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   BrainIcon,
+  BookOpenIcon,
   ClockIcon,
   CoinsIcon,
   IdCardIcon,
@@ -11,6 +12,7 @@ import {
   Palette,
   Plug,
   RadioIcon,
+  ServerIcon,
   SparklesIcon,
   UserCog,
   Wand2Icon,
@@ -23,10 +25,12 @@ import AgentProfilePanel from "@/components/agent-profile-panel";
 import AgentCustomizePage from "@/app/agents/[id]/customize/page";
 import AgentModelsPage from "@/app/agents/[id]/models/page";
 import AgentContextPage from "@/app/agents/[id]/context/page";
+import AgentKnowledgePage from "@/app/agents/[id]/knowledge/page";
 import AgentSkillsPage from "@/app/agents/[id]/skills/page";
 import AgentPluginsPage from "@/app/agents/[id]/plugins/page";
 import AgentChannelsPage from "@/app/agents/[id]/channels/page";
 import AgentSchedulerPage from "@/app/agents/[id]/scheduler/page";
+import AgentMCPPage from "@/app/agents/[id]/mcp/page";
 import AgentUsagePage from "@/app/agents/[id]/usage/page";
 import AccountSettingsPage from "@/app/settings/account/page";
 import GeneralSettingsPage from "@/app/settings/general/page";
@@ -38,7 +42,9 @@ export type AgentSettingsTab =
   | "customize"
   | "models"
   | "context"
+  | "knowledge"
   | "skills"
+  | "mcp"
   | "plugins"
   | "channels"
   | "scheduler"
@@ -54,7 +60,9 @@ const AGENT_TABS: Array<{ id: AgentSettingsTab; label: string; icon: TabIcon }> 
   { id: "customize", label: "Customize", icon: Wand2Icon },
   { id: "models", label: "Models", icon: BrainIcon },
   { id: "context", label: "Context", icon: LayersIcon },
+  { id: "knowledge", label: "Knowledge", icon: BookOpenIcon },
   { id: "skills", label: "Skills", icon: SparklesIcon },
+  { id: "mcp", label: "MCP", icon: ServerIcon },
   { id: "plugins", label: "Plugins", icon: Plug },
   { id: "channels", label: "Channels", icon: RadioIcon },
   { id: "scheduler", label: "Scheduler", icon: ClockIcon },
@@ -168,7 +176,9 @@ export function AgentSettingsDialog({
           {tab === "models" &&
             (role === "viewer" ? <UserModelsPage /> : <AgentModelsPage />)}
           {tab === "context" && <AgentContextPage />}
+          {tab === "knowledge" && <AgentKnowledgePage />}
           {tab === "skills" && <AgentSkillsPage />}
+          {tab === "mcp" && <AgentMCPPage />}
           {tab === "plugins" && <AgentPluginsPage />}
           {tab === "channels" && <AgentChannelsPage />}
           {tab === "scheduler" && <AgentSchedulerPage />}

@@ -1,5 +1,10 @@
-# --- Stage 1: Build web UI ---
-FROM node:22-alpine AS web-builder
+# --- Stage 1: Build web UI (native amd64 only — avoids QEMU SIGILL on arm64) ---
+# Next.js static generation runs V8 JIT under QEMU, which intermittently
+# crashes with SIGILL (signal 4).  Building web once on the native runner
+# and sharing the output to the Go stage eliminates QEMU from the Node
+# pipeline entirely.  The Go cross-compiler (CGO_ENABLED=0) handles arm64
+# natively without emulation.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web-builder
 WORKDIR /src/web
 # Pin pnpm: `latest` started pulling v11, which made
 # pnpm-workspace.yaml's onlyBuiltDependencies allow-list ineffective
@@ -10,13 +15,14 @@ RUN corepack enable && corepack prepare pnpm@10.15.0 --activate
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY web/ .
+# Single worker for static generation — less JIT pressure, fewer pages
+# competing for memory, more deterministic under any emulation layer.
+ENV NEXT_WORKER_COUNT=1
 RUN pnpm build
 
 # --- Stage 1b: Build worldseed bundled plugin (Node 22 for util.styleText) ---
-# Use debian-slim instead of alpine — some npm package postinstall scripts
-# (notably in the openclaw graph) link against glibc and fail under musl
-# with exit code 254 inside docker buildkit.
-FROM node:22-slim AS worldseed-builder
+# Same BUILDPLATFORM trick — this stage also only needs to run once.
+FROM --platform=$BUILDPLATFORM node:22-slim AS worldseed-builder
 # git is required because the openclaw dep graph pulls some packages from
 # git URLs at install time; without it npm exits with ENOENT spawn git.
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
@@ -33,14 +39,15 @@ RUN node node_modules/typescript/bin/tsc || true
 # Drop devDeps (typescript, @types/node) so the final image is smaller.
 RUN npm prune --omit=dev --loglevel=error
 
-# --- Stage 2: Build Go binary ---
+# --- Stage 2: Build Go binary (cross-compiles for TARGETARCH) ---
 FROM golang:1.25-alpine AS go-builder
 RUN apk add --no-cache git
+ARG TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-# Embed the built web UI
+# Embed the built web UI (from native-platform build above)
 COPY --from=web-builder /src/web/out internal/setup/web
 ARG VERSION=dev
 ARG COMMIT=unknown
@@ -51,7 +58,7 @@ ARG DATE=unknown
 # so a docker-built image identifies itself the same way the released
 # binary does; without the buildinfo line the About page silently shows
 # "dev" on every published image (the symptom that triggered this fix).
-RUN CGO_ENABLED=0 go build \
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-s -w \
       -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE} \
       -X github.com/fastclaw-ai/fastclaw/internal/buildinfo.Version=${VERSION} \
